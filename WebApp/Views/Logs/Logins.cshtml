@@ -1,0 +1,110 @@
+@using WebApp.Models
+@using System.Linq
+
+@{
+    Layout = "_Layout";
+    ViewBag.Title = "Лог входов";
+}
+
+<div class="page split">
+    <aside class="side">
+        <nav class="side-menu">
+            <a href="/home" style="padding: 12px 16px; background: white; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #0066cc; cursor: pointer; font-size: 14px; transition: all 0.2s; display: block; margin-bottom: 8px;">← На главную</a>
+            
+            <div class="accordion-group">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <span class="accordion-arrow">►</span>
+                    <span>Администрирование</span>
+                </div>
+                <div class="accordion-content">
+                    <a class="accordion-item" href="/admin">Админ панель</a>
+                    <a class="accordion-item" href="/menu/additem">Добавить пункт меню</a>
+                    <a class="accordion-item" href="/menu/list">Список пунктов меню</a>
+                </div>
+            </div>
+            
+            <div class="accordion-group">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <span class="accordion-arrow">►</span>
+                    <span>Управление Юзарями</span>
+                </div>
+                <div class="accordion-content">
+                    <a class="accordion-item" href="/users/adduser">Добавить пользователя</a>
+                    <a class="accordion-item" href="/users/list">Пользователи</a>
+                    <a class="accordion-item" href="/users/managerights">Права</a>
+                </div>
+            </div>
+            
+            <div class="accordion-group">
+                <div class="accordion-header active" onclick="toggleAccordion(this)">
+                    <span class="accordion-arrow">▼</span>
+                    <span>Логи</span>
+                </div>
+                <div class="accordion-content active">
+                    <a class="accordion-item" href="/logs/logins">Логи входов</a>
+                </div>
+            </div>
+            
+            <a href="/account/logout" onclick="if(!confirm('Вы уверены?')) return false;" class="accordion-item" style="padding: 12px 16px; background: white; border: 1px solid #ddd; border-radius: 4px; margin-top: 8px;">Выход</a>
+        </nav>
+    </aside>
+    <main class="content">
+        <div class="content-topbar">
+            <a class="btn-link" href="/home">На главную</a>
+            <form method="post" action="/account/logout" style="margin: 0;">
+                <button type="submit" class="btn-link">Выйти</button>
+            </form>
+        </div>
+
+        <h1>Лог входов</h1>
+
+        @if (ViewBag.Logins != null && ((List<LogAccess>)ViewBag.Logins).Count > 0) {
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Дата/Время</th>
+                        <th>Логин</th>
+                        <th>IP адрес</th>
+                        <th>Статус</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in (List<LogAccess>)ViewBag.Logins) {
+                        <tr style="background-color: @(log.Successful ? "#efe" : "#fee");">
+                            <td>@log.Id</td>
+                            <td>@log.LoginTime.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            <td>@log.Username</td>
+                            <td>@log.Ip</td>
+                            <td>
+                                @if (log.Successful) {
+                                    <span style="color: green; font-weight: bold;">✓ Успешен</span>
+                                } else {
+                                    <span style="color: red; font-weight: bold;">✗ Неудача</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <div style="margin-top: 20px; text-align: center;">
+                @for (int i = 1; i <= ViewBag.TotalPages; i++) {
+                    @if (i == ViewBag.CurrentPage) {
+                        <span style="padding: 8px 12px; font-weight: bold;">@i</span>
+                    } else {
+                        <a href="/logs/logins?page=@i" style="padding: 8px 12px; text-decoration: underline; color: #0066cc;">@i</a>
+                    }
+                    <span> </span>
+                }
+            </div>
+
+            <p style="text-align: center; margin-top: 20px; color: #666;">
+                Всего записей: <strong>@ViewBag.TotalCount</strong> | 
+                Страница <strong>@ViewBag.CurrentPage</strong> из <strong>@ViewBag.TotalPages</strong>
+            </p>
+        } else {
+            <p>Нет логов входов.</p>
+        }
+    </main>
+</div>

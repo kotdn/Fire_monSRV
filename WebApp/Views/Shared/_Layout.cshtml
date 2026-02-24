@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@ViewBag.Title</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+@RenderBody()
+
+@if (ViewBag.HideMenu != true)
+{
+    <script>
+    function toggleAccordion(header) {
+        // Close all other accordion items in the same menu
+        const allHeaders = document.querySelectorAll('.accordion-header');
+        allHeaders.forEach(h => {
+            if (h !== header && h.classList.contains('active')) {
+                h.classList.remove('active');
+                const content = h.nextElementSibling;
+                if (content && content.classList.contains('accordion-content')) {
+                    content.classList.remove('active');
+                }
+            }
+        });
+        
+        // Toggle current accordion
+        header.classList.toggle('active');
+        const content = header.nextElementSibling;
+        if (content && content.classList.contains('accordion-content')) {
+            content.classList.toggle('active');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const sidebar = document.querySelector('.side');
+        
+        if (sidebar) {
+            // Create menu toggle button for mobile
+            const btn = document.createElement('button');
+            btn.className = 'menu-btn';
+            btn.innerHTML = '☰ Меню';
+            btn.type = 'button';
+            
+            // Insert button before sidebar
+            sidebar.parentElement.insertBefore(btn, sidebar);
+            
+            // Toggle menu on button click
+            btn.addEventListener('click', function() {
+                sidebar.classList.toggle('collapsed');
+                btn.innerHTML = sidebar.classList.contains('collapsed') ? '☰ Развернуть' : '☰ Меню';
+            });
+            
+            // Show/hide button based on screen size
+            function checkScreenSize() {
+                if (window.innerWidth <= 768) {
+                    sidebar.classList.add('collapsed');
+                    btn.innerHTML = '☰ Развернуть';
+                    btn.style.display = 'block';
+                } else {
+                    sidebar.classList.remove('collapsed');
+                    btn.innerHTML = '☰ Меню';
+                    btn.style.display = 'none';
+                }
+            }
+            
+            checkScreenSize();
+            window.addEventListener('resize', checkScreenSize);
+        }
+    });
+    </script>
+}
+</body>
+</html>

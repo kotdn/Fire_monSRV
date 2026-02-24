@@ -1,0 +1,499 @@
+@using WebApp.Models
+
+@{
+    Layout = "_Layout";
+    ViewBag.Title = "Пользователи";
+    var users = ViewBag.Users as List<User>;
+}
+
+<div class="page split">
+    <aside class="side">
+        <nav class="side-menu">
+            <a href="/home" style="padding: 12px 16px; background: white; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #0066cc; cursor: pointer; font-size: 14px; transition: all 0.2s; display: block; margin-bottom: 8px;">← На главную</a>
+            
+            <div class="accordion-group">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <span class="accordion-arrow">►</span>
+                    <span>Администрирование</span>
+                </div>
+                <div class="accordion-content">
+                    <a class="accordion-item" href="/admin">Админ панель</a>
+                    <a class="accordion-item" href="/menu/additem">Добавить пункт меню</a>
+                    <a class="accordion-item" href="/menu/list">Список пунктов меню</a>
+                </div>
+            </div>
+            
+            <div class="accordion-group">
+                <div class="accordion-header active" onclick="toggleAccordion(this)">
+                    <span class="accordion-arrow">▼</span>
+                    <span>Управление Юзарями</span>
+                </div>
+                <div class="accordion-content active">
+                    <a class="accordion-item" href="/users/adduser">Добавить пользователя</a>
+                    <a class="accordion-item" href="/users/list">Пользователи</a>
+                    <a class="accordion-item" href="/users/managerights">Права</a>
+                </div>
+            </div>
+            
+            <div class="accordion-group">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <span class="accordion-arrow">►</span>
+                    <span>Логи</span>
+                </div>
+                <div class="accordion-content">
+                    <a class="accordion-item" href="/logs/logins">Логи входов</a>
+                </div>
+            </div>
+            
+            <a href="/account/logout" onclick="if(!confirm('Вы уверены?')) return false;" class="accordion-item" style="padding: 12px 16px; background: white; border: 1px solid #ddd; border-radius: 4px; margin-top: 8px;">Выход</a>
+        </nav>
+    </aside>
+    <main class="content">
+        <h1>Список пользователей</h1>
+
+        @if (users == null || users.Count == 0)
+        {
+            <p>Нет пользователей в системе.</p>
+        }
+        else
+        {
+            <table class="table table-users">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Имя пользователя</th>
+                        <th>Администратор</th>
+                        <th>Права доступа</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var user in users)
+                    {
+                        <tr>
+                            <td>@user.Id</td>
+                            <td><strong>@user.Username</strong></td>
+                            <td>
+                                @if (user.IsAdmin)
+                                {
+                                    <span class="badge badge-admin">Администратор</span>
+                                }
+                                else
+                                {
+                                    <span class="badge badge-user">Пользователь</span>
+                                }
+                            </td>
+                            <td>
+                                @if (user.UserAccesses != null && user.UserAccesses.Count > 0)
+                                {
+                                    <ul class="access-list">
+                                        @foreach (var access in user.UserAccesses)
+                                        {
+                                            <li>
+                                                <span class="access-badge">@access.AccessRule?.Name</span>
+                                            </li>
+                                        }
+                                    </ul>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">Нет прав</span>
+                                }
+                            </td>
+                            <td>
+                                <button class="btn-action btn-reset" onclick="resetPassword(@user.Id, '@user.Username')">Сбросить пароль</button>
+                                <button class="btn-action btn-set" onclick="showSetPasswordModal(@user.Id, '@user.Username')">Установить пароль</button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+
+        <a href="/users/adduser" class="btn btn-primary">Добавить пользователя</a>
+        <a href="/users/managerights" class="btn btn-secondary">Управление правами</a>
+    </main>
+</div>
+
+<style>
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 30px;
+    font-size: 14px;
+}
+
+.table-users {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.table thead {
+    background: #f5f5f5;
+}
+
+.table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #ddd;
+}
+
+.table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #ddd;
+    vertical-align: middle;
+}
+
+.table tbody tr:hover {
+    background: #f9f9f9;
+}
+
+.badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.badge-admin {
+    background: #fff3cd;
+    color: #856404;
+}
+
+.badge-user {
+    background: #e7f3ff;
+    color: #0066cc;
+}
+
+.access-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.access-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    background: #e8f5e9;
+    color: #2e7d32;
+    border-radius: 4px;
+    font-size: 12px;
+    border: 1px solid #c8e6c9;
+}
+
+.text-muted {
+    color: #999;
+    font-style: italic;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+    display: inline-block;
+    margin-right: 10px;
+    margin-bottom: 10px;
+}
+
+.btn-primary {
+    background: #0066cc;
+    color: white;
+}
+
+.btn-primary:hover {
+    background: #0052a3;
+}
+
+.btn-secondary {
+    background: #ddd;
+    color: #333;
+}
+
+.btn-secondary:hover {
+    background: #ccc;
+}
+
+.btn-action {
+    padding: 6px 12px;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    margin-right: 5px;
+    margin-bottom: 5px;
+    white-space: nowrap;
+}
+
+.btn-reset {
+    background: #ff9800;
+    color: white;
+}
+
+.btn-reset:hover {
+    background: #e68900;
+}
+
+.btn-set {
+    background: #4caf50;
+    color: white;
+}
+
+.btn-set:hover {
+    background: #45a049;
+}
+
+/* Modal styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+    animation: fadeIn 0.3s;
+}
+
+.modal-content {
+    background-color: white;
+    margin: 10% auto;
+    padding: 30px;
+    border-radius: 8px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    animation: slideIn 0.3s;
+}
+
+.modal-header {
+    margin-bottom: 20px;
+}
+
+.modal-header h2 {
+    margin: 0;
+    color: #333;
+}
+
+.modal-body {
+    margin-bottom: 20px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.close-btn {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 20px;
+}
+
+.close-btn:hover {
+    color: #000;
+}
+
+@@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@@keyframes slideIn {
+    from { transform: translateY(-50px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.alert-box {
+    padding: 15px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+    font-weight: 500;
+}
+
+.alert-success-box {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.alert-error-box {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.password-display {
+    background: #f5f5f5;
+    padding: 15px;
+    border-radius: 4px;
+    border: 2px solid #0066cc;
+    margin: 15px 0;
+    font-family: 'Courier New', monospace;
+    font-size: 18px;
+    font-weight: bold;
+    text-align: center;
+    color: #0066cc;
+}
+</style>
+
+<!-- Modal for setting password -->
+<div id="setPasswordModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <h2>Установить пароль</h2>
+        </div>
+        <div class="modal-body">
+            <p>Пользователь: <strong id="modalUsername"></strong></p>
+            <div class="form-group">
+                <label for="newPassword">Новый пароль:</label>
+                <input type="text" id="newPassword" placeholder="Введите новый пароль" style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+                <small style="color: #666; display: block; margin-top: 5px;">Минимум 4 символа</small>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal()">Отмена</button>
+            <button class="btn btn-primary" onclick="setPassword()">Установить</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal for showing new password -->
+<div id="passwordResultModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <span class="close-btn" onclick="closePasswordResultModal()">&times;</span>
+            <h2>Новый пароль</h2>
+        </div>
+        <div class="modal-body">
+            <div id="resultMessage"></div>
+            <div id="passwordDisplayContainer" style="display: none;">
+                <p>Пользователь: <strong id="resultUsername"></strong></p>
+                <p>Новый пароль:</p>
+                <div class="password-display" id="passwordDisplay"></div>
+                <p style="color: #c33; font-size: 13px; margin-top: 10px;">⚠️ Сохраните пароль! Он больше не будет показан.</p>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-primary" onclick="closePasswordResultModal()">Закрыть</button>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentUserId = null;
+
+function showSetPasswordModal(userId, username) {
+    currentUserId = userId;
+    document.getElementById('modalUsername').textContent = username;
+    document.getElementById('newPassword').value = '';
+    document.getElementById('setPasswordModal').style.display = 'block';
+}
+
+function closeModal() {
+    document.getElementById('setPasswordModal').style.display = 'none';
+}
+
+function closePasswordResultModal() {
+    document.getElementById('passwordResultModal').style.display = 'none';
+}
+
+async function setPassword() {
+    const password = document.getElementById('newPassword').value;
+    
+    if (!password || password.length < 4) {
+        alert('Пароль должен содержать минимум 4 символа');
+        return;
+    }
+
+    try {
+        const response = await fetch('/users/SetPassword', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                userId: currentUserId,
+                newPassword: password
+            })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            closeModal();
+            showPasswordResult(result.username, password, false);
+        } else {
+            alert(result.message || 'Ошибка при установке пароля');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Ошибка сети');
+    }
+}
+
+async function resetPassword(userId, username) {
+    if (!confirm(`Сбросить пароль для пользователя "${username}"?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/users/ResetPassword/${userId}`, {
+            method: 'POST'
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showPasswordResult(result.username, result.password, true);
+        } else {
+            alert('Ошибка при сбросе пароля');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Ошибка сети');
+    }
+}
+
+function showPasswordResult(username, password, isReset) {
+    document.getElementById('resultUsername').textContent = username;
+    document.getElementById('passwordDisplay').textContent = password;
+    
+    const messageText = isReset 
+        ? '<div class="alert-box alert-success-box">✓ Пароль успешно сброшен на случайный</div>'
+        : '<div class="alert-box alert-success-box">✓ Пароль успешно установлен</div>';
+    
+    document.getElementById('resultMessage').innerHTML = messageText;
+    document.getElementById('passwordDisplayContainer').style.display = 'block';
+    document.getElementById('passwordResultModal').style.display = 'block';
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    const setModal = document.getElementById('setPasswordModal');
+    const resultModal = document.getElementById('passwordResultModal');
+    
+    if (event.target == setModal) {
+        closeModal();
+    }
+    if (event.target == resultModal) {
+        closePasswordResultModal();
+    }
+}
+</script>

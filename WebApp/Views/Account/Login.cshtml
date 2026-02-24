@@ -1,0 +1,37 @@
+@{
+    Layout = "_Layout";
+    ViewBag.Title = "Вход";
+    ViewBag.HideMenu = true;
+}
+
+<div style="display: flex; justify-content: center; align-items: center; min-height: 100vh;">
+    <div style="background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); width: 100%; max-width: 400px;">
+        <h1 style="text-align: center; margin-bottom: 30px; color: #333;">Вход</h1>
+        
+        @if (ViewBag.Error != null) {
+            <div style="background: #fee; color: #c33; padding: 12px; border: 1px solid #fcc; border-radius: 4px; margin-bottom: 20px;">
+                @ViewBag.Error
+            </div>
+        }
+
+        <form method="post" action="/account/login">
+            <div style="margin-bottom: 20px;">
+                <label for="username" style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">Логин:</label>
+                <input type="text" id="username" name="username" required style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+            </div>
+
+            <div style="margin-bottom: 30px;">
+                <label for="password" style="display: block; margin-bottom: 8px; font-weight: 500; color: #333;">Пароль:</label>
+                <input type="password" id="password" name="password" required style="width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">
+            </div>
+
+            <button type="submit" style="width: 100%; padding: 12px; background: #0066cc; color: white; border: none; border-radius: 4px; font-size: 16px; font-weight: 500; cursor: pointer; transition: background 0.2s;">Войти</button>
+        </form>
+    </div>
+</div>
+
+<style>
+button:hover {
+    background: #0052a3 !important;
+}
+</style>

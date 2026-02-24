@@ -1,0 +1,354 @@
+@{
+    Layout = "_Layout";
+    ViewBag.Title = "Импорт Excel";
+}
+
+<div class="page split">
+    <!-- Боковое меню -->
+    <aside class="admin-sidebar">
+        <div style="padding: 15px 0;">
+            <a href="/admin" style="display: block; padding: 10px; background: #2196F3; color: white; border: none; border-radius: 4px; text-decoration: none; text-align: center; font-size: 13px; transition: all 0.2s; cursor: pointer;" onmouseover="this.style.background='#1976D2'" onmouseout="this.style.background='#2196F3'">
+                ← Назад в админку
+            </a>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <div style="background: #0066cc; color: white; padding: 10px 12px; font-weight: bold; font-size: 12px; border-radius: 4px; text-transform: uppercase; margin-bottom: 8px;">
+                📊 Импорт
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 5px;">
+                <a href="/import/excel" style="display: block; padding: 8px 12px; background: #e3f2fd; border: 1px solid #0066cc; border-left: 3px solid #ff6b6b; border-radius: 4px; text-decoration: none; color: #333; font-size: 13px; font-weight: bold;">
+                    📤 Загрузить файл
+                </a>
+                <a href="/import/list" style="display: block; padding: 8px 12px; background: white; border: 1px solid #ddd; border-left: 3px solid #0066cc; border-radius: 4px; text-decoration: none; color: #333; font-size: 13px; transition: all 0.2s;" 
+                   onmouseover="this.style.background='#f0f7ff'; this.style.borderLeftColor='#4caf50'" 
+                   onmouseout="this.style.background='white'; this.style.borderLeftColor='#0066cc'">
+                    📋 Просмотр данных
+                </a>
+            </div>
+        </div>
+    </aside>
+
+    <main class="content" style="flex: 1;">
+        <div class="content-topbar">
+            <a class="btn-link" href="/import/list">Просмотр данных →</a>
+        </div>
+
+        <h1>📊 Импорт Excel</h1>
+
+        @if (!string.IsNullOrEmpty(ViewBag.Error))
+        {
+            <div style="background: #ffebee; border-left: 4px solid #f44336; padding: 15px; border-radius: 4px; margin: 20px 0; color: #c62828;">
+                <strong>❌ Ошибка:</strong> @ViewBag.Error
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(ViewBag.Success))
+        {
+            <div style="background: #e8f5e9; border-left: 4px solid #4caf50; padding: 15px; border-radius: 4px; margin: 20px 0; color: #2e7d32;">
+                <strong>✅ Успех:</strong> @ViewBag.Success
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(ViewBag.Info))
+        {
+            <div style="background: #e3f2fd; border-left: 4px solid #2196F3; padding: 15px; border-radius: 4px; margin: 20px 0; color: #0d47a1;">
+                <strong>ℹ️ Анализ файла:</strong> <br/>@Html.Raw(ViewBag.Info)
+            </div>
+        }
+
+        @if (ViewBag.AnalysisInfo != null)
+        {
+            dynamic analysis = ViewBag.AnalysisInfo;
+            <div style="background: white; border: 2px solid #2196F3; border-radius: 8px; padding: 20px; margin: 20px 0;">
+                <h3 style="margin-top: 0; color: #2196F3;">📊 Результаты анализа файла</h3>
+                
+                <div style="background: #f5f5f5; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                    <h4 style="margin-top: 0; color: #333;">Структура файла:</h4>
+                    <table style="width: 100%; font-size: 13px;">
+                        <tr>
+                            <td style="padding: 8px;"><strong>📄 Имя файла:</strong></td>
+                            <td style="padding: 8px;">@analysis.FileName</td>
+                        </tr>
+                        <tr style="background: white;">
+                            <td style="padding: 8px;"><strong>📈 Размер:</strong></td>
+                            <td style="padding: 8px;">@(analysis.FileSize / 1024) КБ</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 8px;"><strong>📋 Строк данных:</strong></td>
+                            <td style="padding: 8px;"><strong style="color: #0066cc;">@(analysis.Rows - 1)</strong> записей + 1 заголовок</td>
+                        </tr>
+                        <tr style="background: white;">
+                            <td style="padding: 8px;"><strong>📌 Колонок:</strong></td>
+                            <td style="padding: 8px;"><strong style="color: #0066cc;">@analysis.Columns</strong></td>
+                        </tr>
+                    </table>
+                </div>
+
+                <h4 style="color: #333;">Заголовки колонок:</h4>
+                <div style="background: #f0f7ff; padding: 15px; border-radius: 4px; border-left: 3px solid #2196F3; margin-bottom: 20px;">
+                    <code style="font-size: 12px; line-height: 1.6;">
+                        @{
+                            var headersList = (List<string>)analysis.Headers;
+                            for (int i = 0; i < headersList.Count; i++)
+                            {
+                                <span style="background: #e3f2fd; padding: 3px 6px; border-radius: 3px; margin-right: 5px; display: inline-block; margin-bottom: 5px;">
+                                    <strong>@(i + 1).</strong> @headersList[i]
+                                </span>
+                            }
+                        }
+                    </code>
+                </div>
+
+                <h4 style="color: #333;">Примеры данных (первые 5 строк):</h4>
+                <div style="overflow-x: auto; background: white; border: 1px solid #ddd; border-radius: 4px;">
+                    <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                        @{
+                            var headersList2 = (List<string>)analysis.Headers;
+                            var previewList = (List<List<string>>)analysis.Preview;
+                        }
+                        <thead>
+                            <tr style="background: #f5f5f5;">
+                                <th style="border: 1px solid #ddd; padding: 8px; text-align: left; font-weight: bold;">№</th>
+                                @foreach (var header in headersList2)
+                                {
+                                    <th style="border: 1px solid #ddd; padding: 8px; text-align: left; white-space: nowrap; max-width: 150px;">@header</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int rowIdx = 0; rowIdx < previewList.Count; rowIdx++)
+                            {
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="border: 1px solid #ddd; padding: 8px; background: #f9f9f9; font-weight: bold;">@(rowIdx + 2)</td>
+                                    @foreach (var cell in previewList[rowIdx])
+                                    {
+                                        <td style="border: 1px solid #ddd; padding: 8px; max-width: 150px; overflow: hidden; text-overflow: ellipsis;">@cell</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div style="margin-top: 20px; padding: 15px; background: #fff3e0; border-left: 3px solid #ff9800; border-radius: 4px;">
+                    <strong>⚠️ Проверьте структуру:</strong>
+                    <ul style="margin: 10px 0; padding-left: 20px; color: #666;">
+                        <li>Убедитесь, что заголовки соответствуют вашим данным</li>
+                        <li>Проверьте примеры данных выше</li>
+                        <li>Опишите структуру вашего файла в комментариях</li>
+                    </ul>
+                </div>
+            </div>
+        }
+
+        @if (!string.IsNullOrEmpty(ViewBag.Warning))
+        {
+            <div style="background: #fff3e0; border-left: 4px solid #ff9800; padding: 15px; border-radius: 4px; margin: 20px 0; color: #e65100;">
+                <strong>⚠️ Внимание:</strong> @ViewBag.Warning
+            </div>
+        }
+
+        @if (ViewBag.Errors is List<string> errors && errors.Count > 0)
+        {
+            <div style="background: #ffebee; border-left: 4px solid #f44336; padding: 15px; border-radius: 4px; margin: 20px 0; color: #c62828;">
+                <strong>❌ Ошибки при импорте:</strong>
+                <ul style="margin: 10px 0 0 20px;">
+                    @foreach (var error in errors.Take(5))
+                    {
+                        <li>@error</li>
+                    }
+                    @if (errors.Count > 5)
+                    {
+                        <li><em>...и ещё @(errors.Count - 5) ошибок</em></li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div style="background: #f0f7ff; border-left: 4px solid #0066cc; padding: 20px; border-radius: 4px; margin: 20px 0;">
+            <h3 style="margin: 0 0 15px 0; color: #0066cc;">📋 Формат файла Excel (35 столбцов)</h3>
+            
+            <div style="background: white; padding: 15px; border-radius: 4px; margin-bottom: 15px; border: 1px solid #0066cc;">
+                <h4 style="margin: 0 0 10px 0; color: #0066cc;">📝 Требования к файлу:</h4>
+                <ul style="margin: 10px 0; padding-left: 20px; color: #555;">
+                    <li><strong>Формат:</strong> Excel (.xlsx) или .xls</li>
+                    <li><strong>Первый лист (Sheet 1):</strong> Заголовок в строке 1, данные начиная с строки 2</li>
+                    <li><strong>Столбцы:</strong> Всего 35 столбцов (от A до AI)</li>
+                    <li><strong>Ключевые поля:</strong> Минимум одно из (Рік, Номер інвойса, Опис постачальника) должно быть заполнено</li>
+                    <li><strong>Пустые строки:</strong> Будут автоматически пропущены</li>
+                    <li><strong>Типы данных:</strong>
+                        <ul style="margin: 5px 0; padding-left: 20px;">
+                            <li><code>Числа:</code> 2026, 100 (без пробелов)</li>
+                            <li><code>Дата:</code> dd.MM.yyyy (например: 02.01.2026)</li>
+                            <li><code>Сумма:</code> 45000.50 или 45000,50</li>
+                            <li><code>Текст:</strong> Любые символы (поддерживается Unicode/Кириллица)</li>
+                        </ul>
+                    </li>
+                </ul>
+            </div>
+
+            <p style="margin: 0 0 10px 0; color: #666;">Файл должен содержать следующие колонки (начиная со 2-й строки):</p>
+            <table style="width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 13px;">
+                <thead>
+                    <tr style="background: #e3f2fd;">
+                        <th style="border: 1px solid #90caf9; padding: 8px; text-align: left;">A</th>
+                        <th style="border: 1px solid #90caf9; padding: 8px; text-align: left;">Year (Рік)</th>
+                        <th style="border: 1px solid #90caf9; padding: 8px;">int</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">B</td><td style="border: 1px solid #90caf9; padding: 8px;">EntryNo (Номер вводу)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">C</td><td style="border: 1px solid #90caf9; padding: 8px;">VendorDescription (Опис постачальника)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">D</td><td style="border: 1px solid #90caf9; padding: 8px;">VendorNo (№ постачальника)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">E</td><td style="border: 1px solid #90caf9; padding: 8px;">LocationDescription (Локація)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">F</td><td style="border: 1px solid #90caf9; padding: 8px;">ImporterName (Імпортер)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">G</td><td style="border: 1px solid #90caf9; padding: 8px;">Responsibility (Відповідальна особа)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">H</td><td style="border: 1px solid #90caf9; padding: 8px;">Consignee (Отримувач)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">I</td><td style="border: 1px solid #90caf9; padding: 8px;">DateOfData (Дата даних)</td><td style="border: 1px solid #90caf9; padding: 8px;">date</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">J</td><td style="border: 1px solid #90caf9; padding: 8px;">InvoiceAmount (Сума)</td><td style="border: 1px solid #90caf9; padding: 8px;">decimal</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">K</td><td style="border: 1px solid #90caf9; padding: 8px;">InvoiceNumber (№ інвойса)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">L</td><td style="border: 1px solid #90caf9; padding: 8px;">InvoiceDate (Дата інвойса)</td><td style="border: 1px solid #90caf9; padding: 8px;">date</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">M</td><td style="border: 1px solid #90caf9; padding: 8px;">InvoiceReadiness (Готовність)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">N</td><td style="border: 1px solid #90caf9; padding: 8px;">DateOfReceipt (Дата прибуття)</td><td style="border: 1px solid #90caf9; padding: 8px;">date</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">O</td><td style="border: 1px solid #90caf9; padding: 8px;">GrossWeight (Вага брутто, т)</td><td style="border: 1px solid #90caf9; padding: 8px;">decimal</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">P</td><td style="border: 1px solid #90caf9; padding: 8px;">NetWeight (Вага нетто, т)</td><td style="border: 1px solid #90caf9; padding: 8px;">decimal</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">Q</td><td style="border: 1px solid #90caf9; padding: 8px;">NumberOfUnits (Кількість)</td><td style="border: 1px solid #90caf9; padding: 8px;">int</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">R</td><td style="border: 1px solid #90caf9; padding: 8px;">Volume (Об'єм)</td><td style="border: 1px solid #90caf9; padding: 8px;">decimal</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">S</td><td style="border: 1px solid #90caf9; padding: 8px;">ShipmentFrom (Відвантаження)</td><td style="border: 1px solid #90caf9; padding: 8px;">date</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">T</td><td style="border: 1px solid #90caf9; padding: 8px;">TermsOfDelivery (Умови)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">U</td><td style="border: 1px solid #90caf9; padding: 8px;">Notes (Примітки)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">V</td><td style="border: 1px solid #90caf9; padding: 8px;">DeliveryVia (Доставка)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">W</td><td style="border: 1px solid #90caf9; padding: 8px;">TruckNo (№ машини)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">X</td><td style="border: 1px solid #90caf9; padding: 8px;">CDNo (№ документу)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">Y</td><td style="border: 1px solid #90caf9; padding: 8px;">ProductUnit (Одиниця)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">Z</td><td style="border: 1px solid #90caf9; padding: 8px;">GoodsAmount (Вартість)</td><td style="border: 1px solid #90caf9; padding: 8px;">decimal</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">AA</td><td style="border: 1px solid #90caf9; padding: 8px;">DateOfCollection (Дата збір)</td><td style="border: 1px solid #90caf9; padding: 8px;">date</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">AB</td><td style="border: 1px solid #90caf9; padding: 8px;">Warehouse (Склад)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">AC</td><td style="border: 1px solid #90caf9; padding: 8px;">IsNecessary (Необхідно)</td><td style="border: 1px solid #90caf9; padding: 8px;">да/нет</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">AD</td><td style="border: 1px solid #90caf9; padding: 8px;">Explanation (Пояснення)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">AE</td><td style="border: 1px solid #90caf9; padding: 8px;">Machinery (Машинерія)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">AF</td><td style="border: 1px solid #90caf9; padding: 8px;">Carrier (Перевізник)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">AG</td><td style="border: 1px solid #90caf9; padding: 8px;">CarrierWithTir (Машина TIR)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                    <tr><td style="border: 1px solid #90caf9; padding: 8px;">AH</td><td style="border: 1px solid #90caf9; padding: 8px;">NumberOfLines (Кількість рядків)</td><td style="border: 1px solid #90caf9; padding: 8px;">int</td></tr>
+                    <tr style="background: #f5f5f5;"><td style="border: 1px solid #90caf9; padding: 8px;">AI</td><td style="border: 1px solid #90caf9; padding: 8px;">TypeOfOperation (Тип операції)</td><td style="border: 1px solid #90caf9; padding: 8px;">text</td></tr>
+                </tbody>
+            </table>
+            <p style="margin: 15px 0 0 0; color: #555; font-size: 13px;">
+                <strong>Примітка:</strong> Дати у форматі dd.MM.yyyy (наприклад: 25.02.2026). Десяткові числа з крапкою або комою.
+            </p>
+        </div>
+
+        <form method="post" enctype="multipart/form-data" id="importForm" style="margin-top: 30px;">
+            <div style="background: white; border: 2px dashed #0066cc; border-radius: 8px; padding: 40px; text-align: center;">
+                <div style="font-size: 48px; margin-bottom: 20px;">📁</div>
+                <h3 style="color: #333; margin-bottom: 15px;">Выберите Excel файл</h3>
+                <input type="file" 
+                       name="file" 
+                       accept=".xlsx,.xls" 
+                       required 
+                       id="fileInput"
+                       style="display: block; margin: 20px auto; padding: 15px; border: 2px solid #0066cc; border-radius: 6px; font-size: 14px; cursor: pointer; max-width: 400px;">
+                <button type="submit" 
+                        id="submitBtn"
+                        class="btn" 
+                        style="background: #0066cc; color: white; padding: 15px 40px; font-size: 16px; border: none; border-radius: 6px; cursor: pointer; margin-top: 20px; transition: all 0.3s;"
+                        onmouseover="this.style.background='#0052a3'"
+                        onmouseout="this.style.background='#0066cc'">
+                    📤 Импортировать данные
+                </button>
+            </div>
+        </form>
+
+        <!-- Progress Modal -->
+        <div id="progressModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; align-items: center; justify-content: center;">
+            <div style="background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 30px rgba(0,0,0,0.3); width: 90%; max-width: 500px; text-align: center;">
+                <div style="font-size: 64px; margin-bottom: 20px; animation: spin 2s linear infinite;">⚙️</div>
+                <h2 style="margin: 0 0 10px 0; color: #0066cc;">Идёт импорт данных...</h2>
+                <p style="margin: 0 0 30px 0; color: #666; font-size: 14px;">Пожалуйста, подождите. Это может занять некоторое время в зависимости от размера файла.</p>
+                
+                <div style="background: #f0f0f0; border-radius: 6px; height: 8px; overflow: hidden; margin-bottom: 20px;">
+                    <div id="progressBar" style="height: 100%; background: linear-gradient(90deg, #0066cc, #00a4ff); width: 0%; animation: progress 2s ease-in-out infinite; border-radius: 6px; transition: width 0.3s;"></div>
+                </div>
+                
+                <p style="margin: 0; color: #999; font-size: 12px;">Статус: <span id="progressText">Загрузка файла...</span></p>
+            </div>
+        </div>
+
+        <style>
+            @@keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+            @@keyframes progress {
+                0% { width: 0%; }
+                50% { width: 90%; }
+                100% { width: 100%; }
+            }
+        </style>
+
+        <script>
+            document.getElementById('importForm').addEventListener('submit', function(e) {
+                const fileInput = document.getElementById('fileInput');
+                const fileName = fileInput.files[0]?.name || '';
+                const fileSize = fileInput.files[0]?.size || 0;
+                const fileSizeMB = (fileSize / (1024 * 1024)).toFixed(2);
+                
+                // Show progress modal
+                const modal = document.getElementById('progressModal');
+                const progressText = document.getElementById('progressText');
+                const submitBtn = document.getElementById('submitBtn');
+                
+                modal.style.display = 'flex';
+                submitBtn.disabled = true;
+                submitBtn.style.opacity = '0.6';
+                
+                // Update progress text
+                progressText.textContent = 'Загрузка файла: ' + fileName + ' (' + fileSizeMB + ' МБ)...';
+                
+                // Animate progress bar
+                let progress = 10;
+                const progressBar = document.getElementById('progressBar');
+                
+                const interval = setInterval(() => {
+                    if (progress < 95) {
+                        progress += Math.random() * 20;
+                        if (progress > 95) progress = 95;
+                        progressBar.style.width = progress + '%';
+                    }
+                }, 500);
+                
+                // Hide interval reference for later cleanup
+                window.progressInterval = interval;
+                
+                // Update status messages
+                setTimeout(() => {
+                    progressText.textContent = 'Парсинг Excel файла...';
+                }, 1000);
+                
+                setTimeout(() => {
+                    progressText.textContent = 'Сохранение в базу данных...';
+                }, 3000);
+            });
+            
+            // Clean up and show results after form submission
+            window.addEventListener('load', function() {
+                if (window.progressInterval) {
+                    clearInterval(window.progressInterval);
+                }
+                const modal = document.getElementById('progressModal');
+                const progressBar = document.getElementById('progressBar');
+                
+                if (modal.style.display === 'flex') {
+                    // Complete the progress bar
+                    progressBar.style.width = '100%';
+                    
+                    // Close modal after 1 second
+                    setTimeout(() => {
+                        modal.style.display = 'none';
+                        document.getElementById('submitBtn').disabled = false;
+                        document.getElementById('submitBtn').style.opacity = '1';
+                    }, 1000);
+                }
+            });
+        </script>

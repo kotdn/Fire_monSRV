@@ -1,0 +1,151 @@
+@{
+    Layout = null;
+    ViewBag.HideMenu = true;
+}
+
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Выбор направления</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .choice-container {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            padding: 50px;
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 32px;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 50px;
+            font-size: 16px;
+        }
+
+        .username {
+            color: #667eea;
+            font-weight: bold;
+        }
+
+        .choice-buttons {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .choice-card {
+            flex: 1;
+            min-width: 200px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 12px;
+            padding: 40px 30px;
+            text-decoration: none;
+            color: #333;
+            transition: all 0.3s ease;
+            border: 3px solid transparent;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .choice-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+            border-color: #667eea;
+        }
+
+        .choice-card.admin {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .choice-card.frontend {
+            background: linear-gradient(135deg, #84fab0 0%, #8fd3f4 100%);
+            color: #333;
+        }
+
+        .choice-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        .choice-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .choice-desc {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .logout-link {
+            margin-top: 40px;
+            display: inline-block;
+            color: #999;
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.3s;
+        }
+
+        .logout-link:hover {
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="choice-container">
+        <h1>Добро пожаловать!</h1>
+        <p class="subtitle">Привет, <span class="username">@(Context.Session.GetString("Username"))</span>! Куда направимся?</p>
+
+        <div class="choice-buttons">
+            <a href="/home" class="choice-card admin">
+                <div class="choice-icon">⚙️</div>
+                <div class="choice-title">Админка</div>
+                <div class="choice-desc">Управление системой</div>
+            </a>
+
+            <a href="/frontend" class="choice-card frontend">
+                <div class="choice-icon">🎯</div>
+                <div class="choice-title">Фронт</div>
+                <div class="choice-desc">Рабочая область</div>
+            </a>
+        </div>
+
+        <form method="post" action="/account/logout" style="display: inline;">
+            <button type="submit" class="logout-link" style="background: none; border: none; cursor: pointer; font-size: 14px;">
+                Выйти из системы
+            </button>
+        </form>
+    </div>
+</body>
+</html>

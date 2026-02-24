@@ -1,0 +1,206 @@
+@using WebApp.Models
+
+@{
+    Layout = "_Layout";
+    ViewBag.Title = "Управление правами";
+    var accessRules = ViewBag.AccessRules as List<AccessRule>;
+    var users = ViewBag.Users as List<User>;
+}
+
+<div class="page split">
+    <aside class="side">
+        <nav class="side-menu">
+            <a href="/home" style="padding: 12px 16px; background: white; border: 1px solid #ddd; border-radius: 4px; text-decoration: none; color: #0066cc; cursor: pointer; font-size: 14px; transition: all 0.2s; display: block; margin-bottom: 8px;">← На главную</a>
+            
+            <div class="accordion-group">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <span class="accordion-arrow">►</span>
+                    <span>Администрирование</span>
+                </div>
+                <div class="accordion-content">
+                    <a class="accordion-item" href="/admin">Админ панель</a>
+                    <a class="accordion-item" href="/menu/additem">Добавить пункт меню</a>
+                    <a class="accordion-item" href="/menu/list">Список пунктов меню</a>
+                </div>
+            </div>
+            
+            <div class="accordion-group">
+                <div class="accordion-header active" onclick="toggleAccordion(this)">
+                    <span class="accordion-arrow">▼</span>
+                    <span>Управление Юзарями</span>
+                </div>
+                <div class="accordion-content active">
+                    <a class="accordion-item" href="/users/adduser">Добавить пользователя</a>
+                    <a class="accordion-item" href="/users/list">Пользователи</a>
+                    <a class="accordion-item" href="/users/managerights">Права</a>
+                </div>
+            </div>
+            
+            <div class="accordion-group">
+                <div class="accordion-header" onclick="toggleAccordion(this)">
+                    <span class="accordion-arrow">►</span>
+                    <span>Логи</span>
+                </div>
+                <div class="accordion-content">
+                    <a class="accordion-item" href="/logs/logins">Логи входов</a>
+                </div>
+            </div>
+            
+            <a href="/account/logout" onclick="if(!confirm('Вы уверены?')) return false;" class="accordion-item" style="padding: 12px 16px; background: white; border: 1px solid #ddd; border-radius: 4px; margin-top: 8px;">Выход</a>
+        </nav>
+    </aside>
+    <main class="content">
+        <h1>Управление правами доступа</h1>
+
+        @if (!string.IsNullOrEmpty(ViewBag.Error))
+        {
+            <div class="alert alert-error">@ViewBag.Error</div>
+        }
+
+        <table class="table table-rights">
+            <thead>
+                <tr>
+                    <th>Пользователь</th>
+                    <th>Администратор</th>
+                    @if (accessRules != null)
+                    {
+                        @foreach (var rule in accessRules)
+                        {
+                            <th>@rule.Name</th>
+                        }
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @if (users != null)
+                {
+                    @foreach (var user in users)
+                    {
+                        <tr>
+                            <td>@user.Username</td>
+                            <td>
+                                <input type="checkbox" disabled @(user.IsAdmin ? "checked" : "") title="@(user.IsAdmin ? "Администратор" : "Обычный пользователь")">
+                            </td>
+                            @if (accessRules != null)
+                            {
+                                @foreach (var rule in accessRules)
+                                {
+                                    var hasAccess = user.UserAccesses?.Any(ua => ua.AccessRuleId == rule.Id) ?? false;
+                                    <td>
+                                        <input type="checkbox" 
+                                               class="rule-checkbox" 
+                                               data-user-id="@user.Id" 
+                                               data-rule-id="@rule.Id"
+                                               @(hasAccess ? "checked" : "")
+                                               onchange="updateAccessRule(@user.Id, @rule.Id, this.checked)">
+                                    </td>
+                                }
+                            }
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+
+        <a href="/admin" class="btn btn-secondary">Назад в админку</a>
+    </main>
+</div>
+
+<script>
+async function updateAccessRule(userId, ruleId, hasAccess) {
+    try {
+        const response = await fetch('/users/UpdateUserAccess', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                userId: userId,
+                accessRuleId: ruleId,
+                hasAccess: hasAccess
+            })
+        });
+
+        if (!response.ok) {
+            alert('Ошибка при обновлении прав доступа');
+            location.reload();
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Ошибка сети');
+    }
+}
+</script>
+
+<style>
+.alert {
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    border-radius: 4px;
+    border-left: 4px solid;
+}
+
+.alert-error {
+    background: #fee;
+    color: #c33;
+    border-color: #c33;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+    font-size: 14px;
+}
+
+.table-rights {
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.table thead {
+    background: #f5f5f5;
+}
+
+.table th {
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid #ddd;
+    white-space: nowrap;
+}
+
+.table td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #ddd;
+}
+
+.table tbody tr:hover {
+    background: #f9f9f9;
+}
+
+.table input[type="checkbox"] {
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+    vertical-align: middle;
+}
+
+.btn {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 14px;
+    cursor: pointer;
+    display: inline-block;
+    background: #ddd;
+    color: #333;
+}
+
+.btn:hover {
+    background: #ccc;
+}
+</style>
