@@ -1,0 +1,17 @@
+{
+  "port": 3389,
+  "levels": [
+    {
+      "attempts": 3,
+      "blockMinutes": 30
+    },
+    {
+      "attempts": 5,
+      "blockMinutes": 180
+    },
+    {
+      "attempts": 7,
+      "blockMinutes": 2880
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+<?php
+// Copy this file to config.local.php and set values for MS SQL if you want to use MSSQL instead of SQLite.
+
+// Use 'sqlite' (default) or 'mssql'
+define('DB_TYPE', 'mssql');
+
+// MSSQL connection settings
+define('MSSQL_SERVER', 'localhost');
+define('MSSQL_PORT', 1433);
+define('MSSQL_DATABASE', 'TEST_SAIT');
+define('MSSQL_USER', 'sa');
+define('MSSQL_PASS', 'YourStrong!Passw0rd');

@@ -1,0 +1,8 @@
+C:\Users\samoilenkod\source\repos\Winservice\artifacts\publish\win-x64-fdd\WinService.exe
+C:\Users\samoilenkod\source\repos\Winservice\artifacts\publish\win-x64-fdd\WinService.dll
+C:\Users\samoilenkod\source\repos\Winservice\artifacts\publish\win-x64-fdd\WinService.deps.json
+C:\Users\samoilenkod\source\repos\Winservice\artifacts\publish\win-x64-fdd\WinService.runtimeconfig.json
+C:\Users\samoilenkod\source\repos\Winservice\artifacts\publish\win-x64-fdd\WinService.pdb
+C:\Users\samoilenkod\source\repos\Winservice\artifacts\publish\win-x64-fdd\System.Diagnostics.EventLog.Messages.dll
+C:\Users\samoilenkod\source\repos\Winservice\artifacts\publish\win-x64-fdd\System.Diagnostics.EventLog.dll
+C:\Users\samoilenkod\source\repos\Winservice\artifacts\publish\win-x64-fdd\System.ServiceProcess.ServiceController.dll

@@ -1,0 +1,29 @@
+html,body{height:100%}
+body{font-family:Segoe UI,Arial,Helvetica,sans-serif;background:#fff;color:#222;margin:0}
+.page{min-height:100vh;display:flex;border:1px solid #e0e6eb;box-sizing:border-box}
+.split{flex-direction:row}
+.side{width:10%;min-width:120px;border-right:1px solid #e0e6eb;background:#f9fafb}
+.side-menu{display:flex;flex-direction:column;gap:8px;padding:16px 12px}
+.side-menu a{color:#222;text-decoration:none;padding:8px 10px;border-radius:4px}
+.side-menu a:hover{background:#eef3f8}
+.menu-group{display:flex;flex-direction:column;gap:4px}
+.menu-title{font-size:12px;text-transform:uppercase;color:#666}
+.submenu{padding-left:18px}
+.menu-toggle{display:flex;align-items:center;gap:6px;border:0;background:transparent;padding:8px 10px;border-radius:4px;text-align:left;cursor:pointer}
+.menu-toggle:hover{background:#eef3f8}
+.toggle-icon{display:inline-block;width:14px;text-align:center;color:#333;font-weight:600}
+.submenu-list{display:flex;flex-direction:column;gap:4px}
+.submenu-list[hidden]{display:none}
+.content{flex:1;display:flex;flex-direction:column;padding:12px 24px 24px;box-sizing:border-box}
+.content-topbar{display:flex;justify-content:flex-end;gap:8px}
+.container{max-width:none;margin:0;padding:0;background:transparent;border:0}
+.btn-link{display:inline-block;padding:6px 12px;border:1px solid #ccd;border-radius:4px;text-decoration:none;color:#222;background:#f7f9fb}
+.btn-link:hover{background:#eef3f8}
+label{display:block;margin:8px 0}
+input,textarea{width:100%;padding:8px;border:1px solid #ccd;box-sizing:border-box}
+button{padding:8px 12px;margin-top:8px}
+.message{padding:12px;border-left:4px solid #0078d4;background:#f0f7ff;margin:8px 0}
+.error{color:#a00;padding:8px}
+.info{color:#070;padding:8px}
+table{width:100%;border-collapse:collapse;margin:8px 0}
+table th,table td{border:1px solid #ddd;padding:6px;text-align:left}
