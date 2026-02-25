@@ -51,71 +51,51 @@
                 </div>
             </div>
 
-            <div style="overflow-x: auto; background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
-                <table class="table" style="margin: 0; width: 100%; min-width: 1000px;">
+            <div style="background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); overflow-x: scroll; overflow-y: auto; max-height: 500px;">
+                <table class="table" style="margin: 0; width: 2200px; font-size: 11px; table-layout: fixed;">
                     <thead>
                         <tr style="background: #f5f5f5;">
-                            <th style="padding: 12px; text-align: left; font-size: 13px; width: 50px;">ID</th>
-                            <th style="padding: 12px; text-align: left; font-size: 13px; width: 150px;">📦 Постачальник</th>
-                            <th style="padding: 12px; text-align: left; font-size: 13px; width: 120px;">🏷️ Інвойс</th>
-                            <th style="padding: 12px; text-align: right; font-size: 13px; width: 100px;">💰 Сума</th>
-                            <th style="padding: 12px; text-align: center; font-size: 13px; width: 90px;">📅 Дата</th>
-                            <th style="padding: 12px; text-align: center; font-size: 13px; width: 90px;">📥 Отримано</th>
-                            <th style="padding: 12px; text-align: right; font-size: 13px; width: 80px;">⚖️ Вага</th>
-                            <th style="padding: 12px; text-align: left; font-size: 13px; width: 150px;">👤 Імпортер</th>
-                            <th style="padding: 12px; text-align: center; font-size: 13px; width: 90px;">🔐 Дії</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 30px;">ID</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 35px;">Рік</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 50px;">№</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 70px;">Постачальник</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 65px;">Інвойс</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 55px;">Сума</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 50px;">Дата</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 50px;">Інвойс</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 50px;">Отримання</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 60px;">Перевізник</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 50px;">Умови</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 40px;">Вага бр</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 40px;">Вага нет</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 60px;">Імпортер</th>
+                            <th style="padding: 3px 4px; font-size: 11px; width: 30px;">Дія</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach (var data in importData)
                         {
-                            <tr style="border-bottom: 1px solid #eee; hover: { background: #fafafa; }">
-                                <td style="padding: 12px; font-size: 13px; font-weight: bold; color: #0066cc;">@data.Id</td>
-                                <td style="padding: 12px; font-size: 13px;">
-                                    <strong style="color: #222;">@(string.IsNullOrEmpty(data.VendorDescription) ? "—" : data.VendorDescription.Length > 20 ? data.VendorDescription.Substring(0, 20) + "..." : data.VendorDescription)</strong>
-                                    @if (!string.IsNullOrEmpty(data.LocationDescription))
-                                    {
-                                        <div style="font-size: 11px; color: #999;">@data.LocationDescription</div>
-                                    }
-                                </td>
-                                <td style="padding: 12px; font-size: 13px;">
-                                    @if (!string.IsNullOrEmpty(data.InvoiceNumber))
-                                    {
-                                        <code style="background: #f0f7ff; padding: 4px 8px; border-radius: 3px; font-size: 12px; color: #0066cc;">@data.InvoiceNumber</code>
-                                    }
-                                    else
-                                    {
-                                        <span style="color: #ccc;">—</span>
-                                    }
-                                </td>
-                                <td style="padding: 12px; text-align: right; font-family: monospace; color: #2e7d32; font-weight: bold; font-size: 13px;">
-                                    @(data.InvoiceAmount.HasValue ? data.InvoiceAmount.Value.ToString("N2") : "—")
-                                </td>
-                                <td style="padding: 12px; text-align: center; font-size: 13px;">
-                                    @(data.InvoiceDate?.ToString("dd.MM.yy") ?? "—")
-                                </td>
-                                <td style="padding: 12px; text-align: center; font-size: 13px;">
-                                    @(data.DateOfReceipt?.ToString("dd.MM.yy") ?? "—")
-                                </td>
-                                <td style="padding: 12px; text-align: right; font-family: monospace; font-size: 13px; color: #555;">
-                                    @(data.GrossWeight.HasValue ? data.GrossWeight.Value.ToString("F1") : "—")
-                                </td>
-                                <td style="padding: 12px; font-size: 13px;">
-                                    @if (!string.IsNullOrEmpty(data.ImporterName))
-                                    {
-                                        <span style="color: #555;">@(data.ImporterName.Length > 15 ? data.ImporterName.Substring(0, 15) + "..." : data.ImporterName)</span>
-                                    }
-                                    else
-                                    {
-                                        <span style="color: #ccc;">—</span>
-                                    }
-                                </td>
-                                <td style="padding: 12px; text-align: center;">
+                            <tr style="border-bottom: 1px solid #eee;">
+                                <td style="padding: 3px 4px; font-size: 11px; font-weight: bold; color: #0066cc;">@data.Id</td>
+                                <td style="padding: 3px 4px; font-size: 11px; text-align: center;">@(data.Year ?? 0)</td>
+                                <td style="padding: 3px 4px; font-size: 11px;">@(data.EntryNo ?? "—")</td>
+                                <td style="padding: 3px 4px; font-size: 11px;">@(data.VendorDescription?.Length > 10 ? data.VendorDescription.Substring(0, 10) : data.VendorDescription ?? "—")</td>
+                                <td style="padding: 3px 4px; font-size: 11px;">@(data.InvoiceNumber?.Length > 10 ? data.InvoiceNumber.Substring(0, 10) : data.InvoiceNumber ?? "—")</td>
+                                <td style="padding: 3px 4px; font-size: 11px; text-align: right;">@(data.InvoiceAmount.HasValue ? data.InvoiceAmount.Value.ToString("N0") : "—")</td>
+                                <td style="padding: 3px 4px; font-size: 11px; text-align: center;">@(data.DateOfData?.ToString("dd.MM") ?? "—")</td>
+                                <td style="padding: 3px 4px; font-size: 11px; text-align: center;">@(data.InvoiceDate?.ToString("dd.MM") ?? "—")</td>
+                                <td style="padding: 3px 4px; font-size: 11px; text-align: center;">@(data.DateOfReceipt?.ToString("dd.MM") ?? "—")</td>
+                                <td style="padding: 3px 4px; font-size: 11px;">@(data.Carrier?.Length > 8 ? data.Carrier.Substring(0, 8) : data.Carrier ?? "—")</td>
+                                <td style="padding: 3px 4px; font-size: 11px;">@(data.TermsOfDelivery?.Length > 7 ? data.TermsOfDelivery.Substring(0, 7) : data.TermsOfDelivery ?? "—")</td>
+                                <td style="padding: 3px 4px; font-size: 11px; text-align: right;">@(data.GrossWeight.HasValue ? data.GrossWeight.Value.ToString("F1") : "—")</td>
+                                <td style="padding: 3px 4px; font-size: 11px; text-align: right;">@(data.NetWeight.HasValue ? data.NetWeight.Value.ToString("F1") : "—")</td>
+                                <td style="padding: 3px 4px; font-size: 11px;">@(data.ImporterName?.Length > 8 ? data.ImporterName.Substring(0, 8) : data.ImporterName ?? "—")</td>
+                                <td style="padding: 3px 4px; text-align: center;">
                                     <form method="post" action="/import/delete/@data.Id" style="display: inline;" onsubmit="return confirm('Видалити?');">
-                                        <button type="submit" style="padding: 6px 10px; background: #f44336; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; transition: all 0.2s;"
+                                        <button type="submit" style="padding: 2px 4px; background: #f44336; color: white; border: none; border-radius: 2px; cursor: pointer; font-size: 10px; transition: all 0.2s;"
                                                 onmouseover="this.style.background='#d32f2f'"
                                                 onmouseout="this.style.background='#f44336'">
-                                            🗑️ Видалити
+                                            ✕
                                         </button>
                                     </form>
                                 </td>
@@ -124,8 +104,8 @@
                     </tbody>
                     <tfoot>
                         <tr style="background: #f0f7ff; font-weight: bold;">
-                            <td colspan="3" style="padding: 12px; text-align: right; font-size: 13px;">✅ ВСЬОГО:</td>
-                            <td style="padding: 12px; text-align: right; font-family: monospace; color: #0066cc; font-size: 14px;">@importData.Sum(d => d.InvoiceAmount ?? 0).ToString("N2")</td>
+                            <td colspan="3" style="padding: 3px 4px; text-align: right; font-size: 11px;">Всього:</td>
+                            <td style="padding: 3px 4px; text-align: right; font-family: monospace; color: #0066cc; font-size: 11px;">@importData.Sum(d => d.InvoiceAmount ?? 0).ToString("N0")</td>
                             <td colspan="4"></td>
                             <td></td>
                         </tr>

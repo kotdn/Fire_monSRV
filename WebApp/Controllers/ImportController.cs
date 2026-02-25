@@ -113,6 +113,13 @@ public class ImportController : Controller
                         {
                             var importData = new ImportData();
                             
+                            // Check if VendorDescription (column 3) is empty - if so, we've reached the end of data
+                            string vendorCheck = worksheet.Cells[row, 3].Text?.Trim() ?? "";
+                            if (string.IsNullOrEmpty(vendorCheck))
+                            {
+                                break; // End of data reached
+                            }
+                            
                             // Map columns flexibly - try to find by header names
                             for (int col = 1; col <= colCount; col++)
                             {
@@ -201,11 +208,13 @@ public class ImportController : Controller
                     ViewBag.AnalysisInfo = new
                     {
                         FileName = file.FileName,
+                        SheetName = worksheet.Name,
                         FileSize = file.Length,
                         Rows = rowCount,
                         Columns = colCount,
                         Headers = headers,
-                        Preview = preview
+                        Preview = preview,
+                        ImportedCount = importedCount
                     };
 
                     if (importedCount > 0)
