@@ -103,7 +103,7 @@ class Program
         private const int DEFAULT_FAILED_ATTEMPTS_THRESHOLD = 5;
         private const int DEFAULT_BLOCK_MINUTES = 20;
         private const int DEFAULT_RDP_PORT = 3389;
-        private const int CHECK_INTERVAL = 5000; // 5 seconds (test mode)
+        private const int CHECK_INTERVAL = 1000; // 1 second (real-time mode)
         private EventLog securityLog;
         private Dictionary<string, int> failedAttempts = new Dictionary<string, int>();
         private Thread monitorThread;
@@ -123,14 +123,13 @@ class Program
         private volatile int blockMinutes = DEFAULT_BLOCK_MINUTES;
         private volatile int rdpPort = DEFAULT_RDP_PORT;
         private volatile List<BlockLevel> blockLevels = new List<BlockLevel> { new BlockLevel { Attempts = 3, BlockMinutes = 20 } };
-        private volatile GateConfig gateConfig = new GateConfig { Enabled = false, ListenPort = 3389, TargetHost = "127.0.0.1", TargetPort = 3389 };
+        // private volatile GateConfig gateConfig = new GateConfig { Enabled = false, ListenPort = 3389, TargetHost = "127.0.0.1", TargetPort = 3389 };
 
         private string banDbPath;
         private SqliteConnection banDb;
         private readonly object dbLock = new object();
-
-        private TcpListener gateListener;
-        private Thread gateThread;
+        // private TcpListener gateListener;
+        // private Thread gateThread;
 
         private sealed class BanState
         {
@@ -204,25 +203,24 @@ class Program
             catch { }
 
             WriteLog("Authentication monitoring thread started.");
-
-            TryStartGate();
+            // TryStartGate(); // Legacy gate functionality disabled
         }
 
         protected override void OnStop()
         {
             isRunning = false;
-
-            try { gateListener?.Stop(); } catch { }
+            // try { gateListener?.Stop(); } catch { }
 
             if (monitorThread != null)
                 monitorThread.Join(5000);
 
-            try
-            {
-                if (gateThread != null && gateThread.IsAlive)
-                    gateThread.Join(2000);
-            }
-            catch { }
+            // Gate functionality disabled
+            // try
+            // {
+            //     if (gateThread != null && gateThread.IsAlive)
+            //         gateThread.Join(2000);
+            // }
+            // catch { }
 
             try
             {
@@ -523,32 +521,79 @@ class Program
 
                 if (string.IsNullOrWhiteSpace(remoteIPList))
                 {
-                    // delete the rule if exists
-                    bool removed = RunPowerShell("Remove-NetFirewallRule -Name 'RDP_BLOCK_ALL' -ErrorAction SilentlyContinue | Out-Null");
-                    if (removed)
-                        WriteLog("RDP_BLOCK_ALL deleted (no blocked IPs)");
-                    else
-                        WriteLog("RDP_BLOCK_ALL delete failed");
+                    // delete the rule if exists using netsh
+                    try
+                    {
+                        var psi = new ProcessStartInfo
+                        {
+                            FileName = "netsh.exe",
+                            Arguments = "advfirewall firewall delete rule name=\"RDP_BLOCK_ALL\"",
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true
+                        };
+                        using (var p = Process.Start(psi))
+                        {
+                            p.WaitForExit(5000);
+                            WriteLog("RDP_BLOCK_ALL deleted (no blocked IPs)");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        WriteLog($"RDP_BLOCK_ALL delete failed: {ex.Message}");
+                    }
                     return;
                 }
 
-                string safeRemoteList = remoteIPList.Replace("'", "''");
                 int port = Math.Max(1, rdpPort);
-                string script =
-                    "$rule = Get-NetFirewallRule -Name 'RDP_BLOCK_ALL' -ErrorAction SilentlyContinue;" +
-                    "if ($null -eq $rule) {" +
-                    $" New-NetFirewallRule -Name 'RDP_BLOCK_ALL' -DisplayName 'RDP_BLOCK_ALL' -Direction Inbound -Action Block -Protocol TCP -LocalPort {port} -RemoteAddress '{safeRemoteList}' -Profile Any -Enabled True | Out-Null;" +
-                    "} else {" +
-                    $" Set-NetFirewallRule -Name 'RDP_BLOCK_ALL' -Enabled True -Direction Inbound -Action Block -Protocol TCP -LocalPort {port} | Out-Null;" +
-                    $" (Get-NetFirewallRule -Name 'RDP_BLOCK_ALL' | Get-NetFirewallAddressFilter) | Set-NetFirewallAddressFilter -RemoteAddress '{safeRemoteList}' | Out-Null;" +
-                    "}";
+                
+                // Use netsh for reliable firewall update (no PowerShell cmdlet issues)
+                try
+                {
+                    // Delete old rule
+                    var delPsi = new ProcessStartInfo
+                    {
+                        FileName = "cmd.exe",
+                        Arguments = @"/c netsh advfirewall firewall delete rule name=""RDP_BLOCK_ALL""",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    };
+                    using (var p = Process.Start(delPsi))
+                    {
+                        p.WaitForExit(3000);
+                    }
 
-                string output;
-                bool ok = RunPowerShell(script, out output);
-                if (ok)
-                    WriteLog($"RDP_BLOCK_ALL upserted via NetSecurity: {remoteIPList}");
-                else
-                    WriteLog($"RDP_BLOCK_ALL upsert failed: {output}");
+                    // Build IP list with /32 for each IP
+                    string[] ips = blockedIPs.ToArray();
+                    string remoteIpList = string.Join(",", ips.Select(ip => ip + "/32"));
+
+                    // Create new rule with netsh
+                    var addPsi = new ProcessStartInfo
+                    {
+                        FileName = "cmd.exe",
+                        Arguments = $@"/c netsh advfirewall firewall add rule name=""RDP_BLOCK_ALL"" dir=in action=block protocol=tcp localport={port} remoteip=""{remoteIpList}"" profile=any enable=yes",
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    };
+                    using (var p = Process.Start(addPsi))
+                    {
+                        string output = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
+                        p.WaitForExit(5000);
+                        if (p.ExitCode == 0 || output.IndexOf("Ok", StringComparison.OrdinalIgnoreCase) >= 0)
+                            WriteLog($"RDP_BLOCK_ALL upserted via netsh: {remoteIPList}");
+                        else
+                            WriteLog($"RDP_BLOCK_ALL upsert failed (exit {p.ExitCode}): {output}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    WriteLog($"Error updating firewall rule via netsh: {ex.Message}");
+                }
             }
             catch (Exception ex)
             {
@@ -809,6 +854,42 @@ class Program
                     match = l;
             }
             return match;
+        }
+
+        private void InitBanDb()
+        {
+            try
+            {
+                lock (dbLock)
+                {
+                    try
+                    {
+                        banDb?.Dispose();
+                    }
+                    catch { }
+
+                    banDb = new SqliteConnection($"Data Source={banDbPath}");
+                    banDb.Open();
+
+                    using (var cmd = banDb.CreateCommand())
+                    {
+                        cmd.CommandText = @"
+CREATE TABLE IF NOT EXISTS bans (
+    id INTEGER PRIMARY KEY,
+    ip TEXT NOT NULL,
+    applied_attempts INTEGER,
+    until_local TEXT
+)";
+                        cmd.ExecuteNonQuery();
+                    }
+
+                    WriteLog($"Ban DB initialized at {banDbPath}");
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteLog($"InitBanDb error: {ex.Message}");
+            }
         }
 
         private bool ShouldApplyBan(string ip, int attempts, BlockLevel level, DateTime nowLocal)

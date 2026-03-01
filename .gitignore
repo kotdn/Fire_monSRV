@@ -1,0 +1,25 @@
+# Build results
+bin/
+obj/
+*.exe
+*.dll
+*.pdb
+
+# IDE
+.vs/
+.vscode/
+*.sln.user
+*.suo
+
+# Dependencies
+packages/
+.nuget/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project-specific
+*.log
+*.csv
+*.backup
