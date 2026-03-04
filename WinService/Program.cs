@@ -7,6 +7,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Globalization;
 using System.Text.Json;
@@ -15,8 +16,11 @@ using System.Security.AccessControl;
 using System.Security.Principal;
 using Microsoft.Data.Sqlite;
 
+#pragma warning disable CA1416 // Suppress Windows-only API warnings
+
 class Program
 {
+#pragma warning disable CA1416
     static void Main(string[] args)
         {
             if (args.Length > 0)
@@ -104,18 +108,18 @@ class Program
         private const int DEFAULT_BLOCK_MINUTES = 20;
         private const int DEFAULT_RDP_PORT = 3389;
         private const int CHECK_INTERVAL = 1000; // 1 second (real-time mode)
-        private EventLog securityLog;
+        private EventLog securityLog = null!;
         private Dictionary<string, int> failedAttempts = new Dictionary<string, int>();
-        private Thread monitorThread;
+        private Thread monitorThread = null!;
         private bool isRunning = false;
-        private string logDirectory;
-        private string accessLogPath;
-        private string blockListLogPath;
-        private string whitelistPath;
-        private string configPath;
+        private string logDirectory = "";
+        private string accessLogPath = "";
+        private string blockListLogPath = "";
+        private string whitelistPath = "";
+        private string configPath = "";
         private object logLock = new object();
         private object configLock = new object();
-        private FileSystemWatcher logWatcher;
+        private FileSystemWatcher logWatcher = null!;
         private DateTime lastProcessedFailureTime = DateTime.MinValue;
         private int lastProcessedRecordIndex = 0;
 
@@ -125,8 +129,8 @@ class Program
         private volatile List<BlockLevel> blockLevels = new List<BlockLevel> { new BlockLevel { Attempts = 3, BlockMinutes = 20 } };
         // private volatile GateConfig gateConfig = new GateConfig { Enabled = false, ListenPort = 3389, TargetHost = "127.0.0.1", TargetPort = 3389 };
 
-        private string banDbPath;
-        private SqliteConnection banDb;
+        private string banDbPath = "";
+        private SqliteConnection banDb = null!;
         private readonly object dbLock = new object();
         // private TcpListener gateListener;
         // private Thread gateThread;
@@ -168,7 +172,7 @@ class Program
             InitBanDb();
 
             LoadOrCreateConfig();
-            WriteLog($"Config: Levels={string.Join(",", blockLevels.Select(l => $"{l.Attempts}->{l.BlockMinutes}m"))}");
+            WriteLog($"Config: Port={rdpPort}; Levels={string.Join(",", blockLevels.Select(l => $"{l.Attempts}->{l.BlockMinutes}m"))}");
 
             securityLog = new EventLog("Security", ".");
             lastProcessedFailureTime = DateTime.UtcNow.AddMinutes(-5);
@@ -201,6 +205,15 @@ class Program
                 logWatcher.EnableRaisingEvents = true;
             }
             catch { }
+
+            try
+            {
+                UpdateFirewallRuleFromBlockList();
+            }
+            catch (Exception ex)
+            {
+                WriteLog($"Initial firewall sync error: {ex.Message}");
+            }
 
             WriteLog("Authentication monitoring thread started.");
             // TryStartGate(); // Legacy gate functionality disabled
@@ -316,7 +329,7 @@ class Program
         {
             try
             {
-                if (entry.EventID == 4625)
+                if (entry.InstanceId == 4625)
                     return true;
 
                 return ((int)entry.InstanceId & 0xFFFF) == 4625;
@@ -334,15 +347,29 @@ class Program
                 var rs = entry.ReplacementStrings;
                 if (rs != null && rs.Length > 19)
                 {
-                    string candidate = rs[19]?.Trim();
-                    if (!string.IsNullOrWhiteSpace(candidate) && System.Net.IPAddress.TryParse(candidate, out _))
+                    string candidate = NormalizeIpCandidate(rs[19]);
+                    if (!string.IsNullOrWhiteSpace(candidate))
                         return candidate;
+                }
+
+                if (rs != null)
+                {
+                    foreach (string value in rs)
+                    {
+                        string candidate = NormalizeIpCandidate(value);
+                        if (!string.IsNullOrWhiteSpace(candidate))
+                            return candidate;
+                    }
                 }
 
                 string[] markers = new[]
                 {
                     "Source Network Address",
                     "Source Network Adress",
+                    "Network Address",
+                    "Source Address",
+                    "Сетевой адрес источника",
+                    "Адрес источника",
                     "РЎРµС‚РµРІРѕР№ Р°РґСЂРµСЃ РёСЃС‚РѕС‡РЅРёРєР°",
                     "РђРґСЂРµСЃ РёСЃС‚РѕС‡РЅРёРєР°"
                 };
@@ -353,17 +380,20 @@ class Program
                 {
                     if (markers.Any(m => line.IndexOf(m, StringComparison.OrdinalIgnoreCase) >= 0))
                     {
-                        Match m = Regex.Match(line, @"\b(?:\d{1,3}\.){3}\d{1,3}\b");
-                        if (m.Success) return m.Value;
+                        foreach (string token in SplitIpCandidates(line))
+                        {
+                            string candidate = NormalizeIpCandidate(token);
+                            if (!string.IsNullOrWhiteSpace(candidate))
+                                return candidate;
+                        }
                     }
                 }
 
-                // Fallback: first IPv4 in message body.
-                MatchCollection matches = Regex.Matches(eventMessage, @"\b(?:\d{1,3}\.){3}\d{1,3}\b");
-                foreach (Match match in matches)
+                foreach (string token in SplitIpCandidates(eventMessage))
                 {
-                    if (match.Value != "127.0.0.1" && match.Value != "0.0.0.0")
-                        return match.Value;
+                    string candidate = NormalizeIpCandidate(token);
+                    if (!string.IsNullOrWhiteSpace(candidate))
+                        return candidate;
                 }
             }
             catch (Exception ex)
@@ -371,6 +401,55 @@ class Program
                 WriteLog($"IP parse error: {ex.Message}");
             }
             return null;
+        }
+
+        private IEnumerable<string> SplitIpCandidates(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return Enumerable.Empty<string>();
+
+            return text.Split(new[] { ' ', '\t', '\r', '\n', ',', ';', '|', '(', ')', '{', '}', '"', '\'' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private string NormalizeIpCandidate(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return null;
+
+            string candidate = raw.Trim().Trim('.', ':');
+            if (candidate == "-" || candidate.Equals("localhost", StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            if (candidate.StartsWith("[", StringComparison.Ordinal) && candidate.Contains("]", StringComparison.Ordinal))
+            {
+                int close = candidate.IndexOf(']');
+                candidate = candidate.Substring(1, close - 1);
+            }
+
+            if (candidate.Count(c => c == ':') == 1 && candidate.Contains('.') && candidate.LastIndexOf(':') > 0)
+            {
+                string withoutPort = candidate.Substring(0, candidate.LastIndexOf(':'));
+                if (IPAddress.TryParse(withoutPort, out _))
+                    candidate = withoutPort;
+            }
+
+            if (candidate.StartsWith("::ffff:", StringComparison.OrdinalIgnoreCase))
+            {
+                string mapped = candidate.Substring(7);
+                if (IPAddress.TryParse(mapped, out IPAddress mappedIp))
+                    candidate = mappedIp.ToString();
+            }
+
+            if (!IPAddress.TryParse(candidate, out IPAddress ip))
+                return null;
+
+            if (IPAddress.IsLoopback(ip) || ip.Equals(IPAddress.Any) || ip.Equals(IPAddress.IPv6Any))
+                return null;
+
+            if (ip.IsIPv4MappedToIPv6)
+                return ip.MapToIPv4().ToString();
+
+            return ip.ToString();
         }
 
         private void OnLogChanged(object sender, FileSystemEventArgs e)
@@ -391,7 +470,8 @@ class Program
                 else if (e.Name.Equals("config.json", StringComparison.OrdinalIgnoreCase))
                 {
                     LoadOrCreateConfig();
-                    WriteLog($"Config reloaded: Levels={string.Join(",", blockLevels.Select(l => $"{l.Attempts}->{l.BlockMinutes}m"))}");
+                    UpdateFirewallRuleFromBlockList();
+                    WriteLog($"Config reloaded: Port={rdpPort}; Levels={string.Join(",", blockLevels.Select(l => $"{l.Attempts}->{l.BlockMinutes}m"))}");
                 }
             }
             catch { }
@@ -431,7 +511,7 @@ class Program
                 lock (logLock)
                 {
                     string logEntry = $"[{timestamp:yyyy-MM-dd HH:mm:ss}] IP: {ipAddress} | Attempts: {attemptCount}";
-                    File.AppendAllText(accessLogPath, logEntry + Environment.NewLine);
+                    File.AppendAllText(accessLogPath, logEntry + Environment.NewLine, Encoding.UTF8);
                 }
             }
             catch { }
@@ -445,7 +525,7 @@ class Program
                 {
                     string logEntry =
                         $"[{timestamp:yyyy-MM-dd HH:mm:ss}] BLOCKED IP: {ipAddress} | Failed Attempts: {attemptCount} | BlockMinutes: {blockMinutes} | Until: {untilLocal:yyyy-MM-dd HH:mm:ss}";
-                    File.AppendAllText(blockListLogPath, logEntry + Environment.NewLine);
+                    File.AppendAllText(blockListLogPath, logEntry + Environment.NewLine, Encoding.UTF8);
                 }
             }
             catch { }
@@ -661,7 +741,7 @@ class Program
                 lock (logLock)
                 {
                     string logEntry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}";
-                    File.AppendAllText(logPath, logEntry + Environment.NewLine);
+                    File.AppendAllText(logPath, logEntry + Environment.NewLine, Encoding.UTF8);
                 }
             }
             catch { }
