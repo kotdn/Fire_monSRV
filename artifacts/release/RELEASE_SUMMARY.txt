@@ -1,0 +1,135 @@
+═══════════════════════════════════════════════════════════════
+               RDP SECURITY SUITE - RELEASE PACKAGE
+                      Version: 2026-03-07
+═══════════════════════════════════════════════════════════════
+
+📦 RELEASE FILES:
+----------------
+✅ RDP-Security-Suite-20260307-011551.zip (11.54 MB)
+✅ RDP-Security-Suite-20260307-011551.sha256
+✅ RELEASE_NOTES_20260307.txt
+✅ QUICKSTART.txt
+
+🔒 INTEGRITY VERIFICATION:
+--------------------------
+SHA256: 98E8A82192A979AE20E72C1EDE06B93251C83D94543D9693C172B7A13E1EE078
+File:   RDP-Security-Suite-20260307-011551.zip
+
+Verify: 
+  certutil -hashfile RDP-Security-Suite-20260307-011551.zip SHA256
+
+✅ NO HARDCODED CREDENTIALS - All tokens/passwords removed from source
+
+═══════════════════════════════════════════════════════════════
+
+🚀 WHAT'S NEW IN THIS RELEASE:
+------------------------------
+
+1. TELEGRAM INTEGRATION
+   - Real-time notifications for all security events
+   - Service start/stop alerts  
+   - IP blocking/unblocking confirmations
+   - Configurable via Monitor UI
+
+2. ENHANCED MONITOR
+   - Double-click IP to auto-fill unblock field
+   - Right-click IP for same functionality
+   - Preserved input during list refresh
+   - Fixed blocked IPs display
+
+3. SERVICE IMPROVEMENTS
+   - Fixed firewall deletion spam
+   - Better error handling
+   - Reduced log noise
+   - Reliable startup notifications
+
+4. BUG FIXES
+   - Netsh encoding issues resolved
+   - PowerShell module compatibility
+   - Telegram delivery reliability
+   - UI refresh data preservation
+
+═══════════════════════════════════════════════════════════════
+
+📋 PACKAGE CONTENTS:
+-------------------
+
+Core Components:
+  ✓ WinService.exe          - Windows Service (RDP monitoring)
+  ✓ RDPMonitor.exe          - Management UI Application
+  ✓ All .NET 8.0 dependencies
+
+Management Scripts:
+  ✓ install_service.bat     - Install service
+  ✓ start_service.bat       - Start service
+  ✓ stop_service.bat        - Stop service
+  ✓ restart_all.bat         - Restart service + monitor
+  ✓ uninstall_service.bat   - Remove service
+
+Documentation:
+  ✓ README.txt              - Complete user guide
+  ✓ QUICKSTART.txt          - Fast installation guide
+  ✓ RELEASE_NOTES.txt       - Detailed changelog
+  ✓ config.example.json     - Configuration template
+
+═══════════════════════════════════════════════════════════════
+
+⚙️ SYSTEM REQUIREMENTS:
+-----------------------
+- Windows Server 2016+ or Windows 10/11
+- .NET 8.0 Runtime (or later)
+- Administrator privileges (for service installation)
+- PowerShell 5.1+ (for management scripts)
+
+═══════════════════════════════════════════════════════════════
+
+📥 INSTALLATION QUICK START:
+----------------------------
+
+1. Extract ZIP file
+2. Run install_service.bat as Administrator
+3. (Optional) Configure Telegram via RDPMonitor.exe
+4. Done! Service auto-starts and protects RDP
+
+Full installation guide: See QUICKSTART.txt
+
+═══════════════════════════════════════════════════════════════
+
+🎯 TESTING CHECKLIST FOR PUBLISHER:
+------------------------------------
+
+Before Publishing:
+  ☐ Verify SHA256 hash matches
+  ☐ Extract archive and test installation
+  ☐ Confirm service starts successfully
+  ☐ Test Monitor UI opens without errors
+  ☐ Verify Telegram test connection works
+  ☐ Check blocked IPs display correctly
+  ☐ Test IP unblock functionality
+  ☐ Test whitelist add/remove
+  ☐ Verify service start/stop notifications
+  ☐ Check all batch scripts execute properly
+
+═══════════════════════════════════════════════════════════════
+
+📄 RELEASE ARTIFACTS LOCATION:
+------------------------------
+c:\Users\samoilenkod\source\repos\Winservice\artifacts\release\
+
+Files ready for publication:
+  - RDP-Security-Suite-20260307-011551.zip
+  - RDP-Security-Suite-20260307-011551.sha256
+  - RELEASE_NOTES_20260307.txt
+  - QUICKSTART.txt
+  - This summary file
+
+═══════════════════════════════════════════════════════════════
+
+✅ RELEASE READY FOR PUBLICATION
+
+Built: 2026-03-07 01:17 UTC
+Platform: Windows x64
+.NET Version: .NET 8.0
+Build Type: Release
+
+═══════════════════════════════════════════════════════════════

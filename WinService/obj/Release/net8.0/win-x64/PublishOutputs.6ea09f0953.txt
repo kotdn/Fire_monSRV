@@ -1,2 +1,0 @@
-c:\Users\samoilenkod\source\repos\Winservice\artifacts\final\publish\WinService\WinService.pdb
-c:\Users\samoilenkod\source\repos\Winservice\artifacts\final\publish\WinService\WinService.exe

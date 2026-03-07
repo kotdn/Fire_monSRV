@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "dgSpecHash": "LZ5YaQ/ebSw=",
+  "dgSpecHash": "pP6C213836U=",
   "success": true,
   "projectFilePath": "C:\\Users\\samoilenkod\\source\\repos\\Winservice\\WinService\\WinService.csproj",
   "expectedPackageFiles": [
@@ -12,7 +12,10 @@
     "C:\\Users\\samoilenkod\\.nuget\\packages\\sqlitepclraw.provider.e_sqlite3\\2.1.6\\sqlitepclraw.provider.e_sqlite3.2.1.6.nupkg.sha512",
     "C:\\Users\\samoilenkod\\.nuget\\packages\\system.diagnostics.eventlog\\10.0.3\\system.diagnostics.eventlog.10.0.3.nupkg.sha512",
     "C:\\Users\\samoilenkod\\.nuget\\packages\\system.memory\\4.5.3\\system.memory.4.5.3.nupkg.sha512",
-    "C:\\Users\\samoilenkod\\.nuget\\packages\\system.serviceprocess.servicecontroller\\10.0.3\\system.serviceprocess.servicecontroller.10.0.3.nupkg.sha512"
+    "C:\\Users\\samoilenkod\\.nuget\\packages\\system.serviceprocess.servicecontroller\\10.0.3\\system.serviceprocess.servicecontroller.10.0.3.nupkg.sha512",
+    "C:\\Users\\samoilenkod\\.nuget\\packages\\microsoft.netcore.app.runtime.win-x64\\8.0.24\\microsoft.netcore.app.runtime.win-x64.8.0.24.nupkg.sha512",
+    "C:\\Users\\samoilenkod\\.nuget\\packages\\microsoft.windowsdesktop.app.runtime.win-x64\\8.0.24\\microsoft.windowsdesktop.app.runtime.win-x64.8.0.24.nupkg.sha512",
+    "C:\\Users\\samoilenkod\\.nuget\\packages\\microsoft.aspnetcore.app.runtime.win-x64\\8.0.24\\microsoft.aspnetcore.app.runtime.win-x64.8.0.24.nupkg.sha512"
   ],
   "logs": []
 }

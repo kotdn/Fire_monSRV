@@ -62,43 +62,12 @@ namespace RDPMonitor
             btnEN.FlatAppearance.BorderSize = 0;
             btnEN.Click += (s, e) => SelectLanguage("EN");
             this.Controls.Add(btnEN);
-
-            // Кнопка Русский (с прикольной функцией)
-            var btnRUS = new Button
-            {
-                Text = "РУССКИЙ (RUS)",
-                Location = new Point(20, 190),
-                Size = new Size(360, 45),
-                BackColor = Color.FromArgb(244, 67, 54),
-                ForeColor = Color.White,
-                FlatStyle = FlatStyle.Flat,
-                Font = new Font("Segoe UI", 12, FontStyle.Bold)
-            };
-            btnRUS.FlatAppearance.BorderSize = 0;
-            btnRUS.Click += BtnRUS_Click;
-            this.Controls.Add(btnRUS);
         }
 
         private void SelectLanguage(string lang)
         {
             SelectedLanguage = lang;
             this.Close();
-        }
-
-        private void BtnRUS_Click(object sender, EventArgs e)
-        {
-            // Кидаем кирпич!
-            MessageBox.Show(
-                "РУСНЯ ИДЕТ НАХУЙ! 🇺🇦\n\n" +
-                "Мова інтерфейсу переключена на УКРАЇНСЬКУ!\n\n" +
-                "СЛАВА УКРАЇНІ! 🇺🇦",
-                "⛔ РУССКИЙ ЗАПРЕЩЕН! ⛔",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Warning
-            );
-            
-            // Переключаем на украинский
-            SelectLanguage("UA");
         }
     }
 }

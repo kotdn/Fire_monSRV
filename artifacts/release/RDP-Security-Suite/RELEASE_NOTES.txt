@@ -1,0 +1,119 @@
+===============================================
+RDP Security Suite - Release Notes
+Version: 2026-03-07
+===============================================
+
+NEW FEATURES:
+-------------
+✅ Telegram Integration
+   - Real-time notifications for all security events
+   - Service start/stop alerts
+   - IP blocking/unblocking notifications
+   - Manual action confirmations from Monitor UI
+   - Configurable via Monitor settings tab
+
+✅ Enhanced Monitor UI
+   - Double-click or right-click on blocked IP to auto-fill unblock field
+   - IP unblock field preserved during list refresh (no data loss)
+   - Improved blocked IPs display using netsh (encoding-agnostic)
+   - Clean startup without debug spam
+
+✅ Service Improvements
+   - Fixed firewall rule deletion spam in logs
+   - Rule existence check before deletion attempts
+   - Reduced unnecessary log noise
+   - Better error handling
+
+TECHNICAL IMPROVEMENTS:
+-----------------------
+- Removed all hardcoded credentials from source
+- Fixed CP866 encoding issues in netsh output parsing
+- Reliable IP extraction using regex pattern matching
+- OnShown event for reliable startup notifications
+- Synchronous Telegram message sending for guaranteed delivery
+
+BUG FIXES:
+----------
+- Fixed blocked IPs not showing in Monitor (netsh parsing issue)
+- Fixed "RDP_BLOCK_ALL delete failed" spam when no blocked IPs
+- Fixed Telegram startup messages not sending
+- Fixed encoding errors with .NET 8.0 Code Page 866
+
+CONFIGURATION:
+--------------
+Default config.json structure:
+{
+  "rdpPort": 3389,
+  "blockLevels": [
+    { "attempts": 1, "blockMinutes": 20 },
+    { "attempts": 2, "blockMinutes": 120 },
+    { "attempts": 7, "blockMinutes": 240 }
+  ],
+  "telegram": {
+    "enabled": false,
+    "botToken": "",
+    "chatId": ""
+  }
+}
+
+TELEGRAM MESSAGES:
+------------------
+Service Events:
+  🚀 СТАРТАНУЛ         - Service started
+  ⛔ УПАЛ              - Service stopped
+
+Monitor Events:
+  ✅ СЕРВІС ЗАПУЩЕНО   - Service started from Monitor
+  🛑 СЕРВІС ЗУПИНЕНО   - Service stopped from Monitor
+  🔓 РОЗБЛОКОВАНО: IP  - IP unblocked manually
+  ➕ БІЛИЙ СПИСОК: IP  - IP added to whitelist
+  ➖ ВИДАЛЕНО З БІЛОГО СПИСКУ: IP - IP removed from whitelist
+  🚫 ЗАБЛОКОВАНО: IP на X хв - Manual IP block with duration
+
+REQUIREMENTS:
+-------------
+- Windows Server 2016+ or Windows 10/11
+- .NET 8.0 Runtime
+- Administrator privileges for service installation
+- PowerShell 5.1+ for management scripts
+
+INSTALLATION:
+-------------
+1. Extract RDP-Security-Suite-20260307-011551.zip
+2. Run install_service.bat as Administrator
+3. Configure Telegram (optional) via RDPMonitor.exe
+4. Service auto-starts and monitors RDP authentication
+
+FILES INCLUDED:
+---------------
+- WinService.exe                 (Service binary)
+- RDPMonitor.exe                 (Monitor UI)
+- config.example.json            (Configuration template)
+- install_service.bat            (Installation script)
+- start_service.bat              (Start script)
+- stop_service.bat               (Stop script)
+- restart_all.bat                (Restart service + monitor)
+- uninstall_service.bat          (Uninstall script)
+- README.txt                     (User guide)
+- All necessary .NET dependencies
+
+KNOWN ISSUES:
+-------------
+None reported in this release.
+
+UPGRADE NOTES:
+--------------
+To upgrade from previous version:
+1. Stop service: stop_service.bat
+2. Backup config: C:\ProgramData\RDPSecurityService\config.json
+3. Run uninstall_service.bat
+4. Extract new release
+5. Run install_service.bat
+6. Restore config if needed
+
+VERIFICATION:
+-------------
+SHA256: C734DCC4C7B1A71C2D9777A31371A7D88AA856BFA4D757858C72CBFDCA40B6C9
+File: RDP-Security-Suite-20260307-011551.zip
+
+===============================================

@@ -10,11 +10,15 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using System.Management.Automation;
+using System.Runtime.InteropServices;
 
 namespace RDPMonitor
 {
     public class MainForm : Form
     {
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        private static extern bool DestroyIcon(IntPtr handle);
+
         private const string SERVICE_NAME = "RDPSecurityService";
         private const string LOG_DIR = @"C:\ProgramData\RDPSecurityService";
         private const string LOCAL_SERVICE_EXE = @"C:\Users\samoilenkod\source\repos\Winservice\artifacts\final\winservice\WinService.exe";
@@ -57,12 +61,22 @@ namespace RDPMonitor
         private Button btnAddLevel;
         private Button btnRemoveLevel;
         
+        // Tab: Telegram/Alerts
+        private CheckBox chkTelegramEnabled;
+        private TextBox txtTelegramBotToken;
+        private TextBox txtTelegramChatId;
+        private Button btnTestTelegram;
+        private Button btnSaveTelegram;
+        private Label lblTelegramStatus;
+        private Dictionary<string, TextBox> txtMessageTemplates = new Dictionary<string, TextBox>();
+        
         // Timers and watchers
         private System.Windows.Forms.Timer refreshTimer;
         private FileSystemWatcher fileWatcher;
         private long lastAccessLogPosition = 0;
         private long lastBlockLogPosition = 0;
         private long lastServiceLogPosition = 0;
+        private bool startupTelegramSent = false;
 
         public MainForm()
         {
@@ -70,6 +84,17 @@ namespace RDPMonitor
             SetupFileWatcher();
             LoadInitialData();
             StartAutoRefresh();
+        }
+
+        protected override void OnShown(EventArgs e)
+        {
+            base.OnShown(e);
+
+            if (startupTelegramSent)
+                return;
+
+            startupTelegramSent = true;
+            SendSimpleTelegramMessage("🚀 СТАРТАНУЛ");
         }
 
         private void InitializeComponents()
@@ -80,11 +105,19 @@ namespace RDPMonitor
             this.BackColor = Color.FromArgb(240, 240, 240);
             this.Font = new Font("Segoe UI", 9);
 
+            this.ShowIcon = true;
+
+            var appIcon = LoadApplicationIcon();
+            if (appIcon != null)
+            {
+                this.Icon = appIcon;
+            }
+
             // ===== TOP STATUS PANEL =====
             var pnlTop = new Panel
             {
                 Location = new Point(10, 10),
-                Size = new Size(980, 180),
+                Size = new Size(980, 120),
                 BackColor = Color.White,
                 BorderStyle = BorderStyle.None
             };
@@ -93,7 +126,7 @@ namespace RDPMonitor
             var pnlServiceStatus = new Panel
             {
                 Location = new Point(0, 0),
-                Size = new Size(500, 100),
+                Size = new Size(500, 120),
                 BackColor = Color.White,
                 BorderStyle = BorderStyle.FixedSingle
             };
@@ -103,7 +136,7 @@ namespace RDPMonitor
             var pnlConfig = new Panel
             {
                 Location = new Point(515, 0),
-                Size = new Size(465, 180),
+                Size = new Size(465, 120),
                 BackColor = Color.White,
                 BorderStyle = BorderStyle.FixedSingle
             };
@@ -200,7 +233,7 @@ namespace RDPMonitor
             lblConfig = new Label
             {
                 Location = new Point(10, 35),
-                Size = new Size(450, 140),
+                Size = new Size(450, 75),
                 Font = new Font("Consolas", 8),
                 Text = "Loading...",
                 AutoSize = false,
@@ -213,8 +246,9 @@ namespace RDPMonitor
             // ===== TAB CONTROL =====
             tabControl = new TabControl
             {
-                Location = new Point(10, 210),
-                Size = new Size(980, 530),
+                Location = new Point(10, 140),
+                Size = new Size(980, 560),
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
                 Font = new Font("Segoe UI", 9)
             };
 
@@ -243,7 +277,75 @@ namespace RDPMonitor
             CreateSettingsTab(tabSettings);
             tabControl.TabPages.Add(tabSettings);
 
+            // Tab 6: Alerts (Telegram)
+            var tabAlerts = new TabPage(Lang.Get("TAB_ALERTS"));
+            CreateAlertsTab(tabAlerts);
+            tabControl.TabPages.Add(tabAlerts);
+
             this.Controls.Add(tabControl);
+        }
+
+        private Icon? LoadApplicationIcon()
+        {
+            try
+            {
+                var candidates = new[]
+                {
+                    Path.Combine(AppContext.BaseDirectory, "app.png"),
+                    Path.Combine(Application.StartupPath, "app.png"),
+                    Path.Combine(Directory.GetCurrentDirectory(), "app.png"),
+                    Path.Combine(AppContext.BaseDirectory, "app.ico"),
+                    Path.Combine(Application.StartupPath, "app.ico"),
+                    Path.Combine(Directory.GetCurrentDirectory(), "app.ico")
+                };
+
+                foreach (var iconPath in candidates)
+                {
+                    if (File.Exists(iconPath))
+                    {
+                        if (iconPath.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                        {
+                            var pngIcon = CreateIconFromPng(iconPath);
+                            if (pngIcon != null)
+                            {
+                                return pngIcon;
+                            }
+                        }
+
+                        return new Icon(iconPath);
+                    }
+                }
+
+                return Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private Icon? CreateIconFromPng(string filePath)
+        {
+            try
+            {
+                using var source = new Bitmap(filePath);
+                using var resized = new Bitmap(source, new Size(32, 32));
+                var iconHandle = resized.GetHicon();
+
+                try
+                {
+                    using var temporaryIcon = Icon.FromHandle(iconHandle);
+                    return (Icon)temporaryIcon.Clone();
+                }
+                finally
+                {
+                    DestroyIcon(iconHandle);
+                }
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private void CreateCurrentLogsTab(TabPage tab)
@@ -264,30 +366,33 @@ namespace RDPMonitor
 
         private void CreateBannedIPsTab(TabPage tab)
         {
-            var pnl = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10) };
+            var pnl = new Panel { Dock = DockStyle.Fill, Padding = new Padding(20, 20, 20, 50), AutoScroll = true };
 
             var lbl = new Label
             {
-                Text = "Поточно заблоковані IP (з правила брандмауера):",
+                Text = Lang.Get("SECTION_BLOCKED_IPS_FIREWALL"),
                 AutoSize = true,
                 Location = new Point(10, 10),
+                MaximumSize = new Size(950, 0),
                 Font = new Font("Segoe UI", 9, FontStyle.Bold)
             };
             pnl.Controls.Add(lbl);
 
             lstBannedIPs = new ListBox
             {
-                Location = new Point(10, 30),
-                Size = new Size(950, 400),
+                Location = new Point(10, 45),
+                Size = new Size(950, 330),
                 Font = new Font("Consolas", 10),
                 BackColor = Color.FromArgb(250, 250, 250)
             };
+            lstBannedIPs.DoubleClick += LstBannedIPs_DoubleClick;
+            lstBannedIPs.MouseDown += LstBannedIPs_MouseDown;
             pnl.Controls.Add(lstBannedIPs);
 
             var lblUnblock = new Label
             {
-                Text = "IP для розблокування:",
-                Location = new Point(10, 440),
+                Text = Lang.Get("SECTION_IP_TO_UNBLOCK"),
+                Location = new Point(10, 385),
                 AutoSize = true,
                 Font = new Font("Segoe UI", 9)
             };
@@ -295,7 +400,7 @@ namespace RDPMonitor
 
             txtIPToUnblock = new TextBox
             {
-                Location = new Point(10, 465),
+                Location = new Point(10, 410),
                 Size = new Size(200, 25),
                 Font = new Font("Segoe UI", 9),
                 Padding = new Padding(5)
@@ -304,9 +409,9 @@ namespace RDPMonitor
 
             btnUnblockIP = new Button
             {
-                Text = "🔓 Розблокувати IP",
-                Location = new Point(220, 465),
-                Size = new Size(100, 25),
+                Text = "🔓 " + Lang.Get("BTN_UNBLOCK_IP"),
+                Location = new Point(220, 410),
+                Size = new Size(160, 25),
                 BackColor = Color.FromArgb(255, 152, 0),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
@@ -321,30 +426,49 @@ namespace RDPMonitor
 
         private void CreateWhiteListTab(TabPage tab)
         {
-            var pnl = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10) };
+            var pnl = new Panel { Dock = DockStyle.Fill, Padding = new Padding(20, 20, 20, 50), AutoScroll = true };
 
             var lbl = new Label
             {
-                Text = "Пили IP у білому списку (виключені з блокування):",
+                Text = Lang.Get("SECTION_WHITE_LIST"),
                 AutoSize = true,
                 Location = new Point(10, 10),
+                MaximumSize = new Size(950, 0),
                 Font = new Font("Segoe UI", 9, FontStyle.Bold)
             };
             pnl.Controls.Add(lbl);
 
             lstWhiteList = new ListBox
             {
-                Location = new Point(10, 30),
-                Size = new Size(950, 350),
+                Location = new Point(10, 45),
+                Size = new Size(950, 330),
                 Font = new Font("Consolas", 10),
                 BackColor = Color.FromArgb(250, 250, 250)
             };
+            
+            // Context menu for whitelist
+            var contextMenu = new ContextMenuStrip();
+            var deleteItem = new ToolStripMenuItem("🗑️ Видалити", null, (s, e) => 
+            {
+                if (lstWhiteList.SelectedIndex >= 0)
+                {
+                    string ip = lstWhiteList.SelectedItem.ToString();
+                    if (ip != Lang.Get("MSG_NO_WHITELISTED_IPS"))
+                    {
+                        txtNewWhiteIP.Text = ip;
+                        BtnRemoveWhiteIP_Click(null, null);
+                    }
+                }
+            });
+            contextMenu.Items.Add(deleteItem);
+            lstWhiteList.ContextMenuStrip = contextMenu;
+            
             pnl.Controls.Add(lstWhiteList);
 
             var lblAdd = new Label
             {
-                Text = "Додати IP до білого списку:",
-                Location = new Point(10, 390),
+                Text = Lang.Get("SECTION_ADD_WHITELIST_IP"),
+                Location = new Point(10, 385),
                 AutoSize = true,
                 Font = new Font("Segoe UI", 9)
             };
@@ -352,7 +476,7 @@ namespace RDPMonitor
 
             txtNewWhiteIP = new TextBox
             {
-                Location = new Point(10, 415),
+                Location = new Point(10, 410),
                 Size = new Size(200, 25),
                 Font = new Font("Segoe UI", 9),
                 PlaceholderText = "192.168.1.100"
@@ -361,8 +485,8 @@ namespace RDPMonitor
 
             btnAddWhiteIP = new Button
             {
-                Text = "+ Додати",
-                Location = new Point(220, 415),
+                Text = Lang.Get("BTN_ADD_WITH_PLUS"),
+                Location = new Point(220, 410),
                 Size = new Size(80, 25),
                 BackColor = Color.FromArgb(76, 175, 80),
                 ForeColor = Color.White,
@@ -375,8 +499,8 @@ namespace RDPMonitor
 
             btnRemoveWhiteIP = new Button
             {
-                Text = "✕ Remove",
-                Location = new Point(310, 415),
+                Text = Lang.Get("BTN_REMOVE_WITH_X"),
+                Location = new Point(310, 410),
                 Size = new Size(100, 25),
                 BackColor = Color.FromArgb(244, 67, 54),
                 ForeColor = Color.White,
@@ -392,11 +516,11 @@ namespace RDPMonitor
 
         private void CreateManualBlockTab(TabPage tab)
         {
-            var pnl = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10) };
+            var pnl = new Panel { Dock = DockStyle.Fill, Padding = new Padding(20, 20, 20, 50), AutoScroll = true };
 
             var lblTitle = new Label
             {
-                Text = "Почна блокування IP-адреси",
+                Text = Lang.Get("SECTION_MANUAL_BLOCK"),
                 AutoSize = true,
                 Location = new Point(10, 10),
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
@@ -406,7 +530,7 @@ namespace RDPMonitor
 
             var lblIP = new Label
             {
-                Text = "IP-адреса:",
+                Text = Lang.Get("LABEL_IP_ADDRESS"),
                 AutoSize = true,
                 Location = new Point(10, 50),
                 Font = new Font("Segoe UI", 9)
@@ -424,7 +548,7 @@ namespace RDPMonitor
 
             var lblMinutes = new Label
             {
-                Text = "Block Duration (minutes):",
+                Text = Lang.Get("LABEL_BLOCK_DURATION_FULL"),
                 AutoSize = true,
                 Location = new Point(10, 115),
                 Font = new Font("Segoe UI", 9)
@@ -443,7 +567,7 @@ namespace RDPMonitor
 
             btnManualBlock = new Button
             {
-                Text = "🔒 BLOCK THIS IP",
+                Text = "🔒 " + Lang.Get("BTN_BLOCK_THIS_IP"),
                 Location = new Point(10, 185),
                 Size = new Size(300, 40),
                 BackColor = Color.FromArgb(244, 67, 54),
@@ -462,7 +586,7 @@ namespace RDPMonitor
                 Font = new Font("Segoe UI", 9),
                 BackColor = Color.FromArgb(250, 250, 250),
                 BorderStyle = BorderStyle.FixedSingle,
-                Text = "Status will appear here...",
+                Text = Lang.Get("LABEL_BLOCK_STATUS_PLACEHOLDER"),
                 AutoSize = false
             };
             pnl.Controls.Add(lblBlockStatus);
@@ -472,11 +596,11 @@ namespace RDPMonitor
 
         private void CreateSettingsTab(TabPage tab)
         {
-            var pnl = new Panel { Dock = DockStyle.Fill, Padding = new Padding(10) };
+            var pnl = new Panel { Dock = DockStyle.Fill, Padding = new Padding(20, 20, 20, 50), AutoScroll = true };
 
             var lblTitle = new Label
             {
-                Text = "Service Configuration",
+                Text = Lang.Get("SECTION_SERVICE_CONFIG"),
                 AutoSize = true,
                 Location = new Point(10, 10),
                 Font = new Font("Segoe UI", 11, FontStyle.Bold),
@@ -487,7 +611,7 @@ namespace RDPMonitor
             // RDP Port
             var lblPort = new Label
             {
-                Text = "RDP Port:",
+                Text = Lang.Get("LABEL_RDP_PORT"),
                 AutoSize = true,
                 Location = new Point(10, 50),
                 Font = new Font("Segoe UI", 9)
@@ -506,7 +630,7 @@ namespace RDPMonitor
             // Block Levels
             var lblLevels = new Label
             {
-                Text = "Block Levels (Attempts → Minutes):",
+                Text = Lang.Get("LABEL_BLOCK_LEVELS_TABLE"),
                 AutoSize = true,
                 Location = new Point(10, 120),
                 Font = new Font("Segoe UI", 9, FontStyle.Bold)
@@ -516,14 +640,14 @@ namespace RDPMonitor
             dgvBlockLevels = new DataGridView
             {
                 Location = new Point(10, 145),
-                Size = new Size(400, 250),
+                Size = new Size(400, 200),
                 Font = new Font("Segoe UI", 9),
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false
             };
-            dgvBlockLevels.Columns.Add("Attempts", "Attempts");
-            dgvBlockLevels.Columns.Add("BlockMinutes", "Block Minutes");
+            dgvBlockLevels.Columns.Add("Attempts", Lang.Get("COL_ATTEMPTS"));
+            dgvBlockLevels.Columns.Add("BlockMinutes", Lang.Get("COL_BLOCK_MINUTES"));
 
             for (int i = 0; i < dgvBlockLevels.Columns.Count; i++)
             {
@@ -534,8 +658,8 @@ namespace RDPMonitor
 
             btnAddLevel = new Button
             {
-                Text = "+ Add Level",
-                Location = new Point(10, 405),
+                Text = Lang.Get("BTN_ADD_LEVEL_WITH_PLUS"),
+                Location = new Point(10, 355),
                 Size = new Size(100, 28),
                 BackColor = Color.FromArgb(76, 175, 80),
                 ForeColor = Color.White,
@@ -548,8 +672,8 @@ namespace RDPMonitor
 
             btnRemoveLevel = new Button
             {
-                Text = "✕ Remove",
-                Location = new Point(120, 405),
+                Text = Lang.Get("BTN_REMOVE_WITH_X"),
+                Location = new Point(120, 355),
                 Size = new Size(100, 28),
                 BackColor = Color.FromArgb(244, 67, 54),
                 ForeColor = Color.White,
@@ -562,8 +686,8 @@ namespace RDPMonitor
 
             btnSaveConfig = new Button
             {
-                Text = "💾 SAVE CONFIGURATION",
-                Location = new Point(10, 450),
+                Text = "💾 " + Lang.Get("BTN_SAVE_CONFIGURATION"),
+                Location = new Point(10, 395),
                 Size = new Size(400, 40),
                 BackColor = Color.FromArgb(33, 150, 243),
                 ForeColor = Color.White,
@@ -578,6 +702,488 @@ namespace RDPMonitor
             
             // Load initial config
             LoadConfigToSettings();
+        }
+
+        private void CreateAlertsTab(TabPage tab)
+        {
+            var pnl = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(245, 245, 245),
+                Padding = new Padding(20, 20, 20, 50),
+                AutoScroll = true
+            };
+
+            int yPos = 10;
+
+            // Section header
+            var lblHeader = new Label
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(900, 30),
+                Text = Lang.Get("TELEGRAM_SECTION_HEADER"),
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                ForeColor = Color.FromArgb(0, 102, 204)
+            };
+            pnl.Controls.Add(lblHeader);
+            yPos += 40;
+
+            // Enable checkbox
+            chkTelegramEnabled = new CheckBox
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(400, 25),
+                Text = Lang.Get("TELEGRAM_ENABLE"),
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = Color.FromArgb(50, 50, 50)
+            };
+            chkTelegramEnabled.CheckedChanged += ChkTelegramEnabled_CheckedChanged;
+            pnl.Controls.Add(chkTelegramEnabled);
+            yPos += 35;
+
+            // Bot Token label
+            var lblBotToken = new Label
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(150, 25),
+                Text = Lang.Get("TELEGRAM_BOT_TOKEN"),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+            };
+            pnl.Controls.Add(lblBotToken);
+            yPos += 25;
+
+            // Bot Token textbox
+            txtTelegramBotToken = new TextBox
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(850, 25),
+                Font = new Font("Consolas", 9),
+                PlaceholderText = Lang.Get("TELEGRAM_BOT_TOKEN_PLACEHOLDER")
+            };
+            pnl.Controls.Add(txtTelegramBotToken);
+            yPos += 35;
+
+            // Chat ID label
+            var lblChatId = new Label
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(150, 25),
+                Text = Lang.Get("TELEGRAM_CHAT_ID"),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+            };
+            pnl.Controls.Add(lblChatId);
+            yPos += 25;
+
+            // Chat ID textbox
+            txtTelegramChatId = new TextBox
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(300, 25),
+                Font = new Font("Consolas", 9),
+                PlaceholderText = Lang.Get("TELEGRAM_CHAT_ID_PLACEHOLDER")
+            };
+            pnl.Controls.Add(txtTelegramChatId);
+            yPos += 40;
+
+            // --- MESSAGE TEMPLATES SECTION ---
+            var lblTemplatesHeader = new Label
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(900, 30),
+                Text = Lang.Get("TELEGRAM_MESSAGE_TEMPLATES"),
+                Font = new Font("Segoe UI", 11, FontStyle.Bold),
+                ForeColor = Color.FromArgb(0, 102, 204)
+            };
+            pnl.Controls.Add(lblTemplatesHeader);
+            yPos += 35;
+
+            // Placeholders info
+            var lblPlaceholders = new Label
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(900, 20),
+                Text = Lang.Get("TELEGRAM_PLACEHOLDERS"),
+                Font = new Font("Segoe UI", 8, FontStyle.Italic),
+                ForeColor = Color.Gray
+            };
+            pnl.Controls.Add(lblPlaceholders);
+            yPos += 30;
+
+            // Get current config to determine how many levels exist
+            ServiceConfig? config = null;
+            try 
+            {
+                string configPath = Path.Combine(LOG_DIR, "config.json");
+                if (File.Exists(configPath))
+                {
+                    var json = File.ReadAllText(configPath, Encoding.UTF8);
+                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    config = JsonSerializer.Deserialize<ServiceConfig>(json, options);
+                }
+            }
+            catch { }
+            int levelCount = config?.Levels?.Count ?? 3;
+            
+            // Create template editors for each level
+            txtMessageTemplates.Clear();
+            for (int i = 0; i < levelCount; i++)
+            {
+                string key = $"level{i + 1}";
+                
+                var lblLevel = new Label
+                {
+                    Location = new Point(10, yPos),
+                    Size = new Size(900, 22),
+                    Text = $"{Lang.Get("TELEGRAM_TEMPLATE_LEVEL")} {i + 1}:",
+                    Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                    ForeColor = Color.FromArgb(70, 70, 70)
+                };
+                pnl.Controls.Add(lblLevel);
+                yPos += 25;
+
+                var txtTemplate = new TextBox
+                {
+                    Location = new Point(10, yPos),
+                    Size = new Size(900, 60),
+                    Font = new Font("Consolas", 8),
+                    Multiline = true,
+                    ScrollBars = ScrollBars.Vertical
+                };
+                txtMessageTemplates[key] = txtTemplate;
+                pnl.Controls.Add(txtTemplate);
+                yPos += 70;
+            }
+
+            // Default template
+            var lblDefault = new Label
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(900, 22),
+                Text = Lang.Get("TELEGRAM_TEMPLATE_DEFAULT"),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                ForeColor = Color.FromArgb(70, 70, 70)
+            };
+            pnl.Controls.Add(lblDefault);
+            yPos += 25;
+
+            var txtDefaultTemplate = new TextBox
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(900, 60),
+                Font = new Font("Consolas", 8),
+                Multiline = true,
+                ScrollBars = ScrollBars.Vertical
+            };
+            txtMessageTemplates["default"] = txtDefaultTemplate;
+            pnl.Controls.Add(txtDefaultTemplate);
+            yPos += 75;
+
+            // Buttons panel
+            var btnPanel = new FlowLayoutPanel
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(900, 40),
+                FlowDirection = FlowDirection.LeftToRight
+            };
+
+            btnTestTelegram = new Button
+            {
+                Size = new Size(180, 35),
+                Text = Lang.Get("TELEGRAM_TEST_BUTTON"),
+                BackColor = Color.FromArgb(0, 120, 215),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+            };
+            btnTestTelegram.FlatAppearance.BorderSize = 0;
+            btnTestTelegram.Click += BtnTestTelegram_Click;
+            btnPanel.Controls.Add(btnTestTelegram);
+
+            btnSaveTelegram = new Button
+            {
+                Size = new Size(180, 35),
+                Text = Lang.Get("TELEGRAM_SAVE_BUTTON"),
+                BackColor = Color.FromArgb(76, 175, 80),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Segoe UI", 9, FontStyle.Bold),
+                Margin = new Padding(10, 0, 0, 0)
+            };
+            btnSaveTelegram.FlatAppearance.BorderSize = 0;
+            btnSaveTelegram.Click += BtnSaveTelegram_Click;
+            btnPanel.Controls.Add(btnSaveTelegram);
+
+            pnl.Controls.Add(btnPanel);
+            yPos += 50;
+
+            // Status label
+            lblTelegramStatus = new Label
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(900, 25),
+                Font = new Font("Segoe UI", 9, FontStyle.Italic),
+                ForeColor = Color.Gray
+            };
+            pnl.Controls.Add(lblTelegramStatus);
+            yPos += 40;
+
+            // Help section
+            var lblHelpTitle = new Label
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(900, 25),
+                Text = Lang.Get("TELEGRAM_HELP_TITLE"),
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = Color.FromArgb(100, 100, 100)
+            };
+            pnl.Controls.Add(lblHelpTitle);
+            yPos += 30;
+
+            for (int i = 1; i <= 5; i++)
+            {
+                var step = new Label
+                {
+                    Location = new Point(20, yPos),
+                    Size = new Size(880, 20),
+                    Text = Lang.Get($"TELEGRAM_HELP_STEP{i}"),
+                    Font = new Font("Segoe UI", 9),
+                    ForeColor = Color.FromArgb(80, 80, 80)
+                };
+                pnl.Controls.Add(step);
+                yPos += 25;
+            }
+
+            tab.Controls.Add(pnl);
+
+            // Load initial Telegram config
+            LoadTelegramConfig();
+        }
+
+        private void ChkTelegramEnabled_CheckedChanged(object sender, EventArgs e)
+        {
+            bool enabled = chkTelegramEnabled.Checked;
+            txtTelegramBotToken.Enabled = enabled;
+            txtTelegramChatId.Enabled = enabled;
+            btnTestTelegram.Enabled = enabled;
+            lblTelegramStatus.Text = enabled ? Lang.Get("TELEGRAM_STATUS_ENABLED") : Lang.Get("TELEGRAM_STATUS_DISABLED");
+        }
+
+        private async void BtnTestTelegram_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string botToken = txtTelegramBotToken.Text.Trim();
+                string chatId = txtTelegramChatId.Text.Trim();
+
+                if (string.IsNullOrWhiteSpace(botToken) || string.IsNullOrWhiteSpace(chatId))
+                {
+                    lblTelegramStatus.Text = "Please fill Bot Token and Chat ID";
+                    lblTelegramStatus.ForeColor = Color.Red;
+                    return;
+                }
+
+                string message = "✅ *RDP Security Service*\n\nTelegram notifications are working!\n\n_This is a test message._";
+
+                using (var client = new System.Net.Http.HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(10);
+                    var url = $"https://api.telegram.org/bot{botToken}/sendMessage";
+                    var content = new System.Net.Http.FormUrlEncodedContent(new[]
+                    {
+                        new KeyValuePair<string, string>("chat_id", chatId),
+                        new KeyValuePair<string, string>("text", message),
+                        new KeyValuePair<string, string>("parse_mode", "Markdown")
+                    });
+
+                    var response = await client.PostAsync(url, content);
+                    if (response.IsSuccessStatusCode)
+                    {
+                        lblTelegramStatus.Text = Lang.Get("TELEGRAM_TEST_SUCCESS");
+                        lblTelegramStatus.ForeColor = Color.Green;
+                    }
+                    else
+                    {
+                        lblTelegramStatus.Text = $"{Lang.Get("TELEGRAM_TEST_FAIL")} HTTP {response.StatusCode}";
+                        lblTelegramStatus.ForeColor = Color.Red;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                lblTelegramStatus.Text = $"{Lang.Get("TELEGRAM_TEST_FAIL")} {ex.Message}";
+                lblTelegramStatus.ForeColor = Color.Red;
+            }
+        }
+
+        private void BtnSaveTelegram_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                string configPath = Path.Combine(LOG_DIR, "config.json");
+                if (!File.Exists(configPath))
+                {
+                    lblTelegramStatus.Text = Lang.Get("TELEGRAM_SAVE_FAIL");
+                    lblTelegramStatus.ForeColor = Color.Red;
+                    return;
+                }
+
+                var json = File.ReadAllText(configPath, Encoding.UTF8);
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var config = JsonSerializer.Deserialize<ServiceConfig>(json, options);
+                
+                if (config == null)
+                {
+                    lblTelegramStatus.Text = Lang.Get("TELEGRAM_SAVE_FAIL");
+                    lblTelegramStatus.ForeColor = Color.Red;
+                    return;
+                }
+
+                // Collect message templates
+                var templates = new Dictionary<string, string>();
+                foreach (var kvp in txtMessageTemplates)
+                {
+                    templates[kvp.Key] = kvp.Value.Text.Trim();
+                }
+
+                config.Telegram = new TelegramConfig
+                {
+                    Enabled = chkTelegramEnabled.Checked,
+                    BotToken = txtTelegramBotToken.Text.Trim(),
+                    ChatId = txtTelegramChatId.Text.Trim(),
+                    MessageTemplates = templates
+                };
+
+                var saveOptions = new JsonSerializerOptions 
+                { 
+                    WriteIndented = true,
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+                };
+                var saveJson = JsonSerializer.Serialize(config, saveOptions);
+                File.WriteAllText(configPath, saveJson, Encoding.UTF8);
+
+                lblTelegramStatus.Text = Lang.Get("TELEGRAM_SAVE_SUCCESS");
+                lblTelegramStatus.ForeColor = Color.Green;
+                LoadConfiguration(); // Refresh display
+            }
+            catch (Exception ex)
+            {
+                lblTelegramStatus.Text = $"{Lang.Get("TELEGRAM_SAVE_FAIL")} {ex.Message}";
+                lblTelegramStatus.ForeColor = Color.Red;
+            }
+        }
+
+        private void LoadTelegramConfig()
+        {
+            try
+            {
+                ServiceConfig? config = null;
+                string configPath = Path.Combine(LOG_DIR, "config.json");
+                if (File.Exists(configPath))
+                {
+                    var json = File.ReadAllText(configPath, Encoding.UTF8);
+                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    config = JsonSerializer.Deserialize<ServiceConfig>(json, options);
+                }
+                
+                if (config?.Telegram != null)
+                {
+                    chkTelegramEnabled.Checked = config.Telegram.Enabled;
+                    txtTelegramBotToken.Text = config.Telegram.BotToken ?? "";
+                    txtTelegramChatId.Text = config.Telegram.ChatId ?? "";
+
+                    // Load message templates
+                    if (config.Telegram.MessageTemplates != null)
+                    {
+                        foreach (var kvp in txtMessageTemplates)
+                        {
+                            if (config.Telegram.MessageTemplates.ContainsKey(kvp.Key))
+                            {
+                                kvp.Value.Text = config.Telegram.MessageTemplates[kvp.Key];
+                            }
+                            else
+                            {
+                                // Set default templates if not found
+                                kvp.Value.Text = GetDefaultTemplate(kvp.Key);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // No templates in config, use defaults
+                        foreach (var kvp in txtMessageTemplates)
+                        {
+                            kvp.Value.Text = GetDefaultTemplate(kvp.Key);
+                        }
+                    }
+                }
+                else
+                {
+                    chkTelegramEnabled.Checked = false;
+                    txtTelegramBotToken.Text = "";
+                    txtTelegramChatId.Text = "";
+                    
+                    // Load default templates
+                    foreach (var kvp in txtMessageTemplates)
+                    {
+                        kvp.Value.Text = GetDefaultTemplate(kvp.Key);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private string GetDefaultTemplate(string key)
+        {
+            switch (key)
+            {
+                case "level1":
+                    return "🟡 RDP ALERT - Рівень 1\n\nЗаблоковано IP: {ip}\nСпроб входу: {attempts}\nБлокування: {duration} хв";
+                case "level2":
+                    return "🟠 RDP ALERT - Рівень 2\n\nЗаблоковано IP: {ip}\nСпроб входу: {attempts}\nБлокування: {duration} хв";
+                case "level3":
+                    return "🔴 RDP ALERT - Рівень 3\n\nЗаблоковано IP: {ip}\nСпроб входу: {attempts}\nБлокування: {duration} хв";
+                case "default":
+                    return "🚨 RDP Security Alert\n\nЗаблоковано IP: {ip}\nСпроб атаки: {attempts}\nБлокування: {duration} хв";
+                default:
+                    return $"🔴 RDP Alert {key.ToUpper()}\n\nIP: {{ip}}\nСпроб: {{attempts}}\nБлокування: {{duration}} хв";
+            }
+        }
+
+        private void SendSimpleTelegramMessage(string message)
+        {
+            try
+            {
+                string configPath = Path.Combine(LOG_DIR, "config.json");
+                if (!File.Exists(configPath))
+                    return;
+
+                var json = File.ReadAllText(configPath, Encoding.UTF8);
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var config = JsonSerializer.Deserialize<ServiceConfig>(json, options);
+
+                var telegram = config?.Telegram;
+                if (telegram == null || !telegram.Enabled || string.IsNullOrWhiteSpace(telegram.BotToken) || string.IsNullOrWhiteSpace(telegram.ChatId))
+                    return;
+                
+                using (var client = new System.Net.Http.HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(10);
+                    var url = $"https://api.telegram.org/bot{telegram.BotToken}/sendMessage";
+                    var content = new System.Net.Http.FormUrlEncodedContent(new[]
+                    {
+                        new KeyValuePair<string, string>("chat_id", telegram.ChatId),
+                        new KeyValuePair<string, string>("text", message)
+                    });
+
+                    var response = client.PostAsync(url, content).GetAwaiter().GetResult();
+                    if (!response.IsSuccessStatusCode)
+                        AppendLog($"[TELEGRAM] Startup notification failed: {response.StatusCode}");
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[TELEGRAM] Startup notification error: {ex.Message}");
+            }
         }
 
         private void SetupFileWatcher()
@@ -766,6 +1372,7 @@ namespace RDPMonitor
                 {
                     var levelsText = new System.Text.StringBuilder();
                     levelsText.AppendLine($"RDP Port: {config.Port}");
+                    levelsText.AppendLine($"Refresh: 1 sec (anti-DDoS)");
                     levelsText.AppendLine("Block Levels:");
                     
                     foreach (var level in config.Levels)
@@ -790,64 +1397,35 @@ namespace RDPMonitor
         {
             try
             {
+                var savedIP = txtIPToUnblock.Text; // Preserve user input
                 lstBannedIPs.Items.Clear();
                 var blockedIps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-                using (var ps = PowerShell.Create())
+                var psi = new ProcessStartInfo
                 {
-                    ps.AddScript("Get-NetFirewallRule -Name 'RDP_BLOCK_ALL' -ErrorAction SilentlyContinue | Get-NetFirewallAddressFilter | Select-Object -ExpandProperty RemoteAddress");
-                    var results = ps.Invoke();
-                    foreach (var result in results)
-                    {
-                        var ips = result?.ToString()?.Split(',') ?? Array.Empty<string>();
-                        foreach (var ip in ips)
-                        {
-                            var trimmed = ip?.Trim();
-                            if (!string.IsNullOrWhiteSpace(trimmed) && trimmed != "Any")
-                            {
-                                blockedIps.Add(trimmed);
-                            }
-                        }
-                    }
-                }
+                    FileName = "netsh",
+                    Arguments = "advfirewall firewall show rule name=\"RDP_BLOCK_ALL\"",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
 
-                if (blockedIps.Count == 0)
+                using (var process = Process.Start(psi))
                 {
-                    var psi = new ProcessStartInfo
+                    if (process != null)
                     {
-                        FileName = "netsh",
-                        Arguments = "advfirewall firewall show rule name=\"RDP_BLOCK_ALL\"",
-                        UseShellExecute = false,
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        CreateNoWindow = true
-                    };
+                        string output = process.StandardOutput.ReadToEnd();
+                        process.WaitForExit(3000);
 
-                    using (var process = Process.Start(psi))
-                    {
-                        if (process != null)
+                        // Extract all valid IP addresses from output (regardless of encoding)
+                        var ipMatches = Regex.Matches(output, @"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b");
+                        foreach (Match ipMatch in ipMatches)
                         {
-                            string output = process.StandardOutput.ReadToEnd();
-                            process.WaitForExit(3000);
-
-                            var match = Regex.Match(output, @"Удаленный IP-адрес:\s*(.+)$", RegexOptions.Multiline);
-                            if (!match.Success)
-                                match = Regex.Match(output, @"RemoteIP:\s*(.+)$", RegexOptions.Multiline);
-
-                            if (match.Success)
+                            var ip = ipMatch.Groups[1].Value;
+                            if (System.Net.IPAddress.TryParse(ip, out _))
                             {
-                                var raw = match.Groups[1].Value.Trim();
-                                var netshIps = raw.Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                                foreach (var ip in netshIps)
-                                {
-                                    var cleaned = ip.Trim();
-                                    if (!string.IsNullOrWhiteSpace(cleaned) && cleaned != "Any")
-                                    {
-                                        if (cleaned.EndsWith("/32", StringComparison.Ordinal))
-                                            cleaned = cleaned.Substring(0, cleaned.Length - 3);
-                                        blockedIps.Add(cleaned);
-                                    }
-                                }
+                                blockedIps.Add(ip);
                             }
                         }
                     }
@@ -857,9 +1435,14 @@ namespace RDPMonitor
                     lstBannedIPs.Items.Add(ip);
 
                 if (lstBannedIPs.Items.Count == 0)
-                    lstBannedIPs.Items.Add("(no blocked IPs)");
+                    lstBannedIPs.Items.Add(Lang.Get("MSG_NO_BLOCKED_IPS"));
+
+                txtIPToUnblock.Text = savedIP; // Restore user input
             }
-            catch { }
+            catch (Exception ex)
+            {
+                AppendLog($"[ERROR] LoadBannedIPs: {ex.Message}");
+            }
         }
 
         private void LoadWhiteList()
@@ -883,7 +1466,7 @@ namespace RDPMonitor
                     }
                 }
                 if (lstWhiteList.Items.Count == 0)
-                    lstWhiteList.Items.Add("(no whitelisted IPs)");
+                    lstWhiteList.Items.Add(Lang.Get("MSG_NO_WHITELISTED_IPS"));
             }
             catch { }
         }
@@ -989,6 +1572,7 @@ namespace RDPMonitor
             tabControl.TabPages[2].Text = Lang.Get("TAB_WHITE_LIST");
             tabControl.TabPages[3].Text = Lang.Get("TAB_MANUAL_BLOCK");
             tabControl.TabPages[4].Text = Lang.Get("TAB_SETTINGS");
+            tabControl.TabPages[5].Text = Lang.Get("TAB_ALERTS");
             
             // Buttons
             btnStartService.Text = Lang.Get("BTN_START");
@@ -1033,6 +1617,7 @@ namespace RDPMonitor
                 serviceController.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(10));
                 UpdateServiceStatus();
                 AppendLog("[MONITOR] Service started successfully");
+                SendSimpleTelegramMessage("✅ СЕРВІС ЗАПУЩЕНО");
             }
             catch (Exception ex)
             {
@@ -1066,6 +1651,7 @@ namespace RDPMonitor
                 serviceController.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(10));
                 UpdateServiceStatus();
                 AppendLog("[MONITOR] Service stopped successfully");
+                SendSimpleTelegramMessage("🛑 СЕРВІС ЗУПИНЕНО");
             }
             catch (Exception ex)
             {
@@ -1078,6 +1664,39 @@ namespace RDPMonitor
                 }
 
                 MessageBox.Show($"Failed to stop service: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void LstBannedIPs_DoubleClick(object sender, EventArgs e)
+        {
+            if (lstBannedIPs.SelectedItem != null)
+            {
+                var selectedIP = lstBannedIPs.SelectedItem.ToString();
+                if (selectedIP != Lang.Get("MSG_NO_BLOCKED_IPS"))
+                {
+                    txtIPToUnblock.Text = selectedIP;
+                    txtIPToUnblock.Focus();
+                    txtIPToUnblock.SelectAll();
+                }
+            }
+        }
+
+        private void LstBannedIPs_MouseDown(object sender, MouseEventArgs e)
+        {
+            if (e.Button == MouseButtons.Right)
+            {
+                int index = lstBannedIPs.IndexFromPoint(e.Location);
+                if (index >= 0 && index < lstBannedIPs.Items.Count)
+                {
+                    lstBannedIPs.SelectedIndex = index;
+                    var selectedIP = lstBannedIPs.Items[index].ToString();
+                    if (selectedIP != Lang.Get("MSG_NO_BLOCKED_IPS"))
+                    {
+                        txtIPToUnblock.Text = selectedIP;
+                        txtIPToUnblock.Focus();
+                        txtIPToUnblock.SelectAll();
+                    }
+                }
             }
         }
 
@@ -1110,6 +1729,7 @@ namespace RDPMonitor
                 LoadBannedIPs();
                 txtIPToUnblock.Clear();
                 AppendLog($"[MONITOR] IP {ip} unlocked manually");
+                SendSimpleTelegramMessage($"🔓 РОЗБЛОКОВАНО: {ip}");
                 MessageBox.Show($"IP {ip} has been unlocked", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -1137,6 +1757,7 @@ namespace RDPMonitor
                 LoadWhiteList();
                 txtNewWhiteIP.Clear();
                 AppendLog($"[MONITOR] IP {ip} added to whitelist");
+                SendSimpleTelegramMessage($"➕ БІЛИЙ СПИСОК: {ip}");
                 MessageBox.Show($"IP {ip} added to whitelist", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -1154,7 +1775,7 @@ namespace RDPMonitor
             }
 
             string ip = lstWhiteList.SelectedItem.ToString();
-            if (ip == "(no whitelisted IPs)") return;
+            if (ip == Lang.Get("MSG_NO_WHITELISTED_IPS")) return;
 
             try
             {
@@ -1164,6 +1785,7 @@ namespace RDPMonitor
 
                 LoadWhiteList();
                 AppendLog($"[MONITOR] IP {ip} removed from whitelist");
+                SendSimpleTelegramMessage($"➖ ВИДАЛЕНО З БІЛОГО СПИСКУ: {ip}");
                 MessageBox.Show($"IP {ip} removed from whitelist", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception ex)
@@ -1213,6 +1835,7 @@ namespace RDPMonitor
                 lblBlockStatus.Text = $"✓ Successfully blocked IP {ip} for {minutes} minutes\nUntil: {until:yyyy-MM-dd HH:mm:ss}\n\nIP has been added to firewall rule.";
                 lblBlockStatus.ForeColor = Color.FromArgb(76, 175, 80);
                 AppendLog($"[MONITOR] Manually blocked IP {ip} for {minutes} minutes");
+                SendSimpleTelegramMessage($"🚫 ЗАБЛОКОВАНО: {ip} на {minutes} хв (до {until:HH:mm})");
                 txtIPToBlock.Clear();
             }
             catch (Exception ex)
@@ -1337,6 +1960,9 @@ namespace RDPMonitor
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
+            // Отправить сообщение перед закрытием
+            SendSimpleTelegramMessage("⛔ МЕНЯ ЗАКРЫЛИ");
+            
             refreshTimer?.Stop();
             fileWatcher?.Dispose();
             base.OnFormClosing(e);
@@ -1350,6 +1976,24 @@ namespace RDPMonitor
         
         [System.Text.Json.Serialization.JsonPropertyName("levels")]
         public List<BlockLevel> Levels { get; set; } = new List<BlockLevel>();
+        
+        [System.Text.Json.Serialization.JsonPropertyName("telegram")]
+        public TelegramConfig? Telegram { get; set; }
+    }
+
+    public class TelegramConfig
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("enabled")]
+        public bool Enabled { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("botToken")]
+        public string BotToken { get; set; } = "";
+
+        [System.Text.Json.Serialization.JsonPropertyName("chatId")]
+        public string ChatId { get; set; } = "";
+
+        [System.Text.Json.Serialization.JsonPropertyName("messageTemplates")]
+        public Dictionary<string, string> MessageTemplates { get; set; } = new Dictionary<string, string>();
     }
 
     public class BlockLevel

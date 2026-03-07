@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System.Net.NetworkInformation;
+using System.Drawing;
 
 namespace RDPSecurityViewer
 {
@@ -39,6 +40,13 @@ namespace RDPSecurityViewer
         private Timer refreshTimer;
         private Timer currentLogTimer;
         private TabPage tabCurrentLog;
+        private TabPage tabConfig;
+        private TextBox txtConfigPort;
+        private Label lblConfigCurrentPort;
+        private Button btnSaveConfig;
+        private Button btnRestartService;
+        private NotifyIcon trayIcon;
+        private ContextMenuStrip trayMenu;
         private Dictionary<string, string> currentConnState = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private HashSet<string> countedAttemptEndpoints = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private Dictionary<string, int> authAttemptCounters = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -49,6 +57,7 @@ namespace RDPSecurityViewer
         private string logDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "RDPSecurityService");
         private string whitelistPath;
         private string blockLogPath;
+        private string configPath;
 
         public MainForm()
         {
@@ -60,6 +69,7 @@ namespace RDPSecurityViewer
             whitelistPath = Path.Combine(logDir, "whiteList.log");
             blockLogPath = Path.Combine(logDir, "block_list.log");
             currentLogFilePath = Path.Combine(logDir, "current_log.log");
+            configPath = Path.Combine(logDir, "config.json");
             if (!File.Exists(whitelistPath))
                 File.Create(whitelistPath).Close();
 
@@ -67,7 +77,7 @@ namespace RDPSecurityViewer
             Panel toolbar = new Panel();
             toolbar.Height = 50;
             toolbar.Dock = DockStyle.Top;
-            toolbar.BackColor = System.Drawing.Color.FromArgb(45, 45, 48);
+            toolbar.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
 
             btnRefresh = new Button();
             btnRefresh.Text = "Refresh";
@@ -82,8 +92,8 @@ namespace RDPSecurityViewer
             lblStatus = new Label();
             lblStatus.Text = "Ready";
             lblStatus.Location = new System.Drawing.Point(120, 15);
-            lblStatus.ForeColor = System.Drawing.Color.White;
-            lblStatus.BackColor = System.Drawing.Color.FromArgb(45, 45, 48);
+            lblStatus.ForeColor = System.Drawing.Color.Black;
+            lblStatus.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
             lblStatus.AutoSize = true;
             toolbar.Controls.Add(lblStatus);
 
@@ -96,11 +106,11 @@ namespace RDPSecurityViewer
             {
                 var brush = e.Index == tabs.SelectedIndex 
                     ? new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(0, 120, 215))
-                    : new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(45, 45, 48));
+                    : new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(230, 230, 230));
                 
                 var textBrush = e.Index == tabs.SelectedIndex
                     ? System.Drawing.Brushes.White
-                    : System.Drawing.Brushes.LightGray;
+                    : System.Drawing.Brushes.Black;
                 
                 e.Graphics.FillRectangle(brush, e.Bounds);
                 
@@ -136,11 +146,11 @@ namespace RDPSecurityViewer
             Panel panelBlockedInput = new Panel();
             panelBlockedInput.Dock = DockStyle.Top;
             panelBlockedInput.Height = 80;
-            panelBlockedInput.BackColor = System.Drawing.Color.FromArgb(45, 45, 48);
+            panelBlockedInput.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
 
             Label lblBlockedIP = new Label();
             lblBlockedIP.Text = "IP Address:";
-            lblBlockedIP.ForeColor = System.Drawing.Color.White;
+            lblBlockedIP.ForeColor = System.Drawing.Color.Black;
             lblBlockedIP.Location = new System.Drawing.Point(10, 20);
             lblBlockedIP.AutoSize = true;
             panelBlockedInput.Controls.Add(lblBlockedIP);
@@ -176,7 +186,7 @@ namespace RDPSecurityViewer
             Panel panelBlockedButtons = new Panel();
             panelBlockedButtons.Height = 50;
             panelBlockedButtons.Dock = DockStyle.Bottom;
-            panelBlockedButtons.BackColor = System.Drawing.Color.FromArgb(45, 45, 48);
+            panelBlockedButtons.BackColor = System.Drawing.Color.FromArgb(230, 230, 230);
 
             btnDeleteBlocked = new Button();
             btnDeleteBlocked.Text = "Delete Selected";
@@ -209,7 +219,7 @@ namespace RDPSecurityViewer
             Panel panelInputWL = new Panel();
             panelInputWL.Dock = DockStyle.Top;
             panelInputWL.Height = 80;
-            panelInputWL.BackColor = System.Drawing.Color.FromArgb(45, 45, 48);
+            panelInputWL.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
 
             Label lblIP = new Label();
             lblIP.Text = "IP Address:";
@@ -247,7 +257,7 @@ namespace RDPSecurityViewer
             Panel panelWhitelistButtons = new Panel();
             panelWhitelistButtons.Height = 50;
             panelWhitelistButtons.Dock = DockStyle.Bottom;
-            panelWhitelistButtons.BackColor = System.Drawing.Color.FromArgb(45, 45, 48);
+            panelWhitelistButtons.BackColor = System.Drawing.Color.FromArgb(230, 230, 230);
 
             btnDeleteWhitelist = new Button();
             btnDeleteWhitelist.Text = "Delete Selected";
@@ -270,11 +280,11 @@ namespace RDPSecurityViewer
             Panel panelCurrentTop = new Panel();
             panelCurrentTop.Dock = DockStyle.Top;
             panelCurrentTop.Height = 50;
-            panelCurrentTop.BackColor = System.Drawing.Color.FromArgb(45, 45, 48);
+            panelCurrentTop.BackColor = System.Drawing.Color.FromArgb(230, 230, 230);
 
             Label lblPort = new Label();
             lblPort.Text = "Port:";
-            lblPort.ForeColor = System.Drawing.Color.White;
+            lblPort.ForeColor = System.Drawing.Color.Black;
             lblPort.Location = new System.Drawing.Point(10, 15);
             lblPort.AutoSize = true;
             panelCurrentTop.Controls.Add(lblPort);
@@ -322,11 +332,128 @@ namespace RDPSecurityViewer
             tabCurrentLog.Controls.Add(gridCurrentLog);
             tabCurrentLog.Controls.Add(panelCurrentTop);
             tabs.TabPages.Add(tabCurrentLog);
+
+            // TAB 5 - CONFIGURATION
+            tabConfig = new TabPage("Configuration");
+
+            Panel panelConfig = new Panel();
+            panelConfig.Dock = DockStyle.Fill;
+            panelConfig.BackColor = System.Drawing.Color.FromArgb(240, 240, 240);
+            panelConfig.Padding = new Padding(20);
+
+            // Current Port Info
+            Label lblConfigTitle = new Label();
+            lblConfigTitle.Text = "RDP Security Service Configuration";
+            lblConfigTitle.Font = new System.Drawing.Font("Segoe UI", 14, System.Drawing.FontStyle.Bold);
+            lblConfigTitle.ForeColor = System.Drawing.Color.FromArgb(0, 120, 215);
+            lblConfigTitle.AutoSize = true;
+            lblConfigTitle.Location = new System.Drawing.Point(20, 20);
+            panelConfig.Controls.Add(lblConfigTitle);
+
+            lblConfigCurrentPort = new Label();
+            lblConfigCurrentPort.Text = "Loading...";
+            lblConfigCurrentPort.Font = new System.Drawing.Font("Segoe UI", 10);
+            lblConfigCurrentPort.ForeColor = System.Drawing.Color.Black;
+            lblConfigCurrentPort.AutoSize = true;
+            lblConfigCurrentPort.Location = new System.Drawing.Point(20, 60);
+            panelConfig.Controls.Add(lblConfigCurrentPort);
+
+            // Port Settings
+            GroupBox grpPort = new GroupBox();
+            grpPort.Text = "RDP Port Settings";
+            grpPort.Font = new System.Drawing.Font("Segoe UI", 10, System.Drawing.FontStyle.Bold);
+            grpPort.ForeColor = System.Drawing.Color.Black;
+            grpPort.Location = new System.Drawing.Point(20, 100);
+            grpPort.Width = 500;
+            grpPort.Height = 150;
+            grpPort.BackColor = System.Drawing.Color.White;
+
+            Label lblPortHelp = new Label();
+            lblPortHelp.Text = "Enter the RDP port to monitor (usually 3389):";
+            lblPortHelp.Font = new System.Drawing.Font("Segoe UI", 9);
+            lblPortHelp.ForeColor = System.Drawing.Color.Black;
+            lblPortHelp.AutoSize = true;
+            lblPortHelp.Location = new System.Drawing.Point(15, 30);
+            grpPort.Controls.Add(lblPortHelp);
+
+            Label lblPort = new Label();
+            lblPort.Text = "Port:";
+            lblPort.Font = new System.Drawing.Font("Segoe UI", 9);
+            lblPort.ForeColor = System.Drawing.Color.Black;
+            lblPort.AutoSize = true;
+            lblPort.Location = new System.Drawing.Point(15, 65);
+            grpPort.Controls.Add(lblPort);
+
+            txtConfigPort = new TextBox();
+            txtConfigPort.Location = new System.Drawing.Point(60, 62);
+            txtConfigPort.Width = 100;
+            txtConfigPort.Font = new System.Drawing.Font("Segoe UI", 10);
+            grpPort.Controls.Add(txtConfigPort);
+
+            btnSaveConfig = new Button();
+            btnSaveConfig.Text = "Save Configuration";
+            btnSaveConfig.Location = new System.Drawing.Point(15, 100);
+            btnSaveConfig.Width = 150;
+            btnSaveConfig.Height = 35;
+            btnSaveConfig.BackColor = System.Drawing.Color.FromArgb(0, 120, 215);
+            btnSaveConfig.ForeColor = System.Drawing.Color.White;
+            btnSaveConfig.Font = new System.Drawing.Font("Segoe UI", 9, System.Drawing.FontStyle.Bold);
+            btnSaveConfig.FlatStyle = FlatStyle.Flat;
+            btnSaveConfig.Click += (s, e) => SaveConfiguration();
+            grpPort.Controls.Add(btnSaveConfig);
+
+            panelConfig.Controls.Add(grpPort);
+
+            // Service Control
+            GroupBox grpService = new GroupBox();
+            grpService.Text = "Service Control";
+            grpService.Font = new System.Drawing.Font("Segoe UI", 10, System.Drawing.FontStyle.Bold);
+            grpService.ForeColor = System.Drawing.Color.Black;
+            grpService.Location = new System.Drawing.Point(20, 270);
+            grpService.Width = 500;
+            grpService.Height = 120;
+            grpService.BackColor = System.Drawing.Color.White;
+
+            Label lblServiceHelp = new Label();
+            lblServiceHelp.Text = "Restart the service after changing configuration:";
+            lblServiceHelp.Font = new System.Drawing.Font("Segoe UI", 9);
+            lblServiceHelp.ForeColor = System.Drawing.Color.Black;
+            lblServiceHelp.AutoSize = true;
+            lblServiceHelp.Location = new System.Drawing.Point(15, 30);
+            grpService.Controls.Add(lblServiceHelp);
+
+            btnRestartService = new Button();
+            btnRestartService.Text = "Restart Service";
+            btnRestartService.Location = new System.Drawing.Point(15, 60);
+            btnRestartService.Width = 150;
+            btnRestartService.Height = 35;
+            btnRestartService.BackColor = System.Drawing.Color.FromArgb(200, 50, 50);
+            btnRestartService.ForeColor = System.Drawing.Color.White;
+            btnRestartService.Font = new System.Drawing.Font("Segoe UI", 9, System.Drawing.FontStyle.Bold);
+            btnRestartService.FlatStyle = FlatStyle.Flat;
+            btnRestartService.Click += (s, e) => RestartService();
+            grpService.Controls.Add(btnRestartService);
+
+            panelConfig.Controls.Add(grpService);
+
+            // Info Label
+            Label lblConfigInfo = new Label();
+            lblConfigInfo.Text = "ℹ Configuration file: " + configPath;
+            lblConfigInfo.Font = new System.Drawing.Font("Segoe UI", 8);
+            lblConfigInfo.ForeColor = System.Drawing.Color.Gray;
+            lblConfigInfo.AutoSize = true;
+            lblConfigInfo.Location = new System.Drawing.Point(20, 410);
+            panelConfig.Controls.Add(lblConfigInfo);
+
+            tabConfig.Controls.Add(panelConfig);
+            tabs.TabPages.Add(tabConfig);
             tabs.SelectedIndexChanged += (s, e) =>
             {
                 tabs.Invalidate();
                 if (tabs.SelectedTab == tabCurrentLog)
                     LoadCurrentConnections();
+                else if (tabs.SelectedTab == tabConfig)
+                    LoadConfiguration();
             };
 
             // ADD TO FORM
@@ -346,6 +473,37 @@ namespace RDPSecurityViewer
                     LoadCurrentConnections();
             };
             currentLogTimer.Start();
+
+            // TRAY ICON SETUP
+            trayIcon = new NotifyIcon();
+            try
+            {
+                trayIcon.Icon = SystemIcons.Application;
+            }
+            catch
+            {
+                // Fallback: create empty icon if SystemIcons not available
+                Bitmap bmp = new Bitmap(16, 16);
+                using (Graphics g = Graphics.FromImage(bmp))
+                {
+                    g.FillRectangle(new SolidBrush(Color.FromArgb(0, 120, 215)), 0, 0, 16, 16);
+                }
+                trayIcon.Icon = Icon.FromHandle(bmp.GetHicon());
+            }
+            trayIcon.Text = "RDP Security Service";
+            trayIcon.Visible = true;
+            trayIcon.Click += (s, e) => ToggleWindowVisibility();
+            trayIcon.DoubleClick += (s, e) => ToggleWindowVisibility();
+
+            trayMenu = new ContextMenuStrip();
+            trayMenu.Items.Add("Show", null, (s, e) => ShowWindow());
+            trayMenu.Items.Add("Hide", null, (s, e) => HideWindow());
+            trayMenu.Items.Add("-"); // Separator
+            trayMenu.Items.Add("Exit", null, (s, e) => ExitApplication());
+            trayIcon.ContextMenuStrip = trayMenu;
+
+            this.FormBorderStyle = FormBorderStyle.Sizable;
+            this.ShowInTaskbar = true;
 
             LoadLogs();
             LoadBlockedIps();
@@ -1061,11 +1219,265 @@ namespace RDPSecurityViewer
             return fileOk && fwOk;
         }
 
-        protected override void OnFormClosing(FormClosingEventArgs e)
+        private void ToggleWindowVisibility()
         {
+            if (this.Visible)
+                HideWindow();
+            else
+                ShowWindow();
+        }
+
+        private void ShowWindow()
+        {
+            this.Show();
+            this.WindowState = FormWindowState.Normal;
+            this.Activate();
+            this.ShowInTaskbar = true;
+        }
+
+        private void HideWindow()
+        {
+            this.Hide();
+            this.WindowState = FormWindowState.Minimized;
+            this.ShowInTaskbar = false;
+        }
+
+        private void ExitApplication()
+        {
+            trayIcon?.Dispose();
+            trayMenu?.Dispose();
             refreshTimer?.Stop();
             currentLogTimer?.Stop();
-            base.OnFormClosing(e);
+            Application.Exit();
+        }
+
+        private void LoadConfiguration()
+        {
+            try
+            {
+                if (!File.Exists(configPath))
+                {
+                    lblConfigCurrentPort.Text = "⚠ Configuration file not found: " + configPath;
+                    lblConfigCurrentPort.ForeColor = System.Drawing.Color.Red;
+                    txtConfigPort.Text = "3389";
+                    return;
+                }
+
+                string json = File.ReadAllText(configPath);
+                
+                // Simple JSON parsing (no dependency on System.Text.Json)
+                int portIndex = json.IndexOf("\"port\"");
+                if (portIndex >= 0)
+                {
+                    int colonIndex = json.IndexOf(":", portIndex);
+                    int commaIndex = json.IndexOf(",", colonIndex);
+                    if (colonIndex >= 0 && commaIndex >= 0)
+                    {
+                        string portValue = json.Substring(colonIndex + 1, commaIndex - colonIndex - 1).Trim();
+                        txtConfigPort.Text = portValue;
+                        lblConfigCurrentPort.Text = "✓ Current monitoring port: " + portValue;
+                        lblConfigCurrentPort.ForeColor = System.Drawing.Color.FromArgb(0, 120, 0);
+                    }
+                    else
+                    {
+                        lblConfigCurrentPort.Text = "⚠ Failed to parse port from config";
+                        lblConfigCurrentPort.ForeColor = System.Drawing.Color.Red;
+                        txtConfigPort.Text = "3389";
+                    }
+                }
+                else
+                {
+                    lblConfigCurrentPort.Text = "⚠ Port not found in config file";
+                    lblConfigCurrentPort.ForeColor = System.Drawing.Color.Red;
+                    txtConfigPort.Text = "3389";
+                }
+            }
+            catch (Exception ex)
+            {
+                lblConfigCurrentPort.Text = "✗ Error loading config: " + ex.Message;
+                lblConfigCurrentPort.ForeColor = System.Drawing.Color.Red;
+                txtConfigPort.Text = "3389";
+            }
+        }
+
+        private void SaveConfiguration()
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(txtConfigPort.Text))
+                {
+                    MessageBox.Show("Please enter a valid port number.", "Invalid Port", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (!int.TryParse(txtConfigPort.Text, out int port) || port < 1 || port > 65535)
+                {
+                    MessageBox.Show("Port must be between 1 and 65535.", "Invalid Port", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (!File.Exists(configPath))
+                {
+                    MessageBox.Show("Configuration file not found: " + configPath, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // Read existing config
+                string json = File.ReadAllText(configPath);
+
+                // Replace port value (simple string replacement)
+                int portIndex = json.IndexOf("\"port\"");
+                if (portIndex >= 0)
+                {
+                    int colonIndex = json.IndexOf(":", portIndex);
+                    int commaIndex = json.IndexOf(",", colonIndex);
+                    if (colonIndex >= 0 && commaIndex >= 0)
+                    {
+                        string oldPortValue = json.Substring(colonIndex + 1, commaIndex - colonIndex - 1).Trim();
+                        json = json.Replace("\"port\": " + oldPortValue, "\"port\": " + port.ToString());
+                    }
+                    else
+                    {
+                        MessageBox.Show("Failed to parse config file structure.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        return;
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("Port field not found in config file.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                // Backup old config
+                string backupPath = configPath + ".backup";
+                File.Copy(configPath, backupPath, true);
+
+                // Write new config
+                File.WriteAllText(configPath, json);
+
+                lblConfigCurrentPort.Text = "✓ Configuration saved! Port: " + port.ToString();
+                lblConfigCurrentPort.ForeColor = System.Drawing.Color.FromArgb(0, 120, 0);
+
+                MessageBox.Show(
+                    "Configuration saved successfully!\n\n" +
+                    "New port: " + port.ToString() + "\n\n" +
+                    "⚠ You must restart the service for changes to take effect.\n" +
+                    "Use the 'Restart Service' button below.",
+                    "Success",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error saving configuration: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void RestartService()
+        {
+            try
+            {
+                var result = MessageBox.Show(
+                    "This will restart the RDP Security Service.\n\n" +
+                    "The service will stop monitoring for a few seconds.\n\n" +
+                    "Continue?",
+                    "Restart Service",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Question
+                );
+
+                if (result != DialogResult.Yes)
+                    return;
+
+                lblStatus.Text = "Stopping service...";
+                lblStatus.Refresh();
+
+                // Stop service
+                var stopProcess = new System.Diagnostics.Process();
+                stopProcess.StartInfo.FileName = "net";
+                stopProcess.StartInfo.Arguments = "stop RDPSecurityService";
+                stopProcess.StartInfo.UseShellExecute = false;
+                stopProcess.StartInfo.RedirectStandardOutput = true;
+                stopProcess.StartInfo.RedirectStandardError = true;
+                stopProcess.StartInfo.CreateNoWindow = true;
+                stopProcess.StartInfo.Verb = "runas"; // Run as admin
+                stopProcess.Start();
+                stopProcess.WaitForExit();
+
+                System.Threading.Thread.Sleep(2000);
+
+                lblStatus.Text = "Starting service...";
+                lblStatus.Refresh();
+
+                // Start service
+                var startProcess = new System.Diagnostics.Process();
+                startProcess.StartInfo.FileName = "net";
+                startProcess.StartInfo.Arguments = "start RDPSecurityService";
+                startProcess.StartInfo.UseShellExecute = false;
+                startProcess.StartInfo.RedirectStandardOutput = true;
+                startProcess.StartInfo.RedirectStandardError = true;
+                startProcess.StartInfo.CreateNoWindow = true;
+                startProcess.StartInfo.Verb = "runas"; // Run as admin
+                startProcess.Start();
+                startProcess.WaitForExit();
+
+                lblStatus.Text = "Ready";
+
+                if (startProcess.ExitCode == 0)
+                {
+                    MessageBox.Show(
+                        "Service restarted successfully!\n\n" +
+                        "The new configuration is now active.",
+                        "Success",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information
+                    );
+                }
+                else
+                {
+                    MessageBox.Show(
+                        "Service restart completed, but there may have been issues.\n\n" +
+                        "Check Windows Services (services.msc) to verify the service is running.",
+                        "Warning",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning
+                    );
+                }
+            }
+            catch (System.ComponentModel.Win32Exception)
+            {
+                MessageBox.Show(
+                    "Access denied. Administrator privileges required.\n\n" +
+                    "Please run this application as Administrator to restart the service,\n" +
+                    "or use the restart_service_admin.bat script.",
+                    "Error",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error
+                );
+                lblStatus.Text = "Ready";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error restarting service: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                lblStatus.Text = "Ready";
+            }
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            if (e.CloseReason == CloseReason.UserClosing)
+            {
+                e.Cancel = true;
+                HideWindow();
+            }
+            else
+            {
+                trayIcon?.Dispose();
+                trayMenu?.Dispose();
+                refreshTimer?.Stop();
+                currentLogTimer?.Stop();
+            }
         }
     }
 }

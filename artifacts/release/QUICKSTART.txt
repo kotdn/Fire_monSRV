@@ -1,0 +1,160 @@
+===============================================
+   RDP Security Suite - Quick Start Guide
+===============================================
+
+FAST INSTALLATION (5 minutes):
+-------------------------------
+
+1. EXTRACT
+   - Unzip RDP-Security-Suite-20260307-011551.zip to any folder
+
+2. INSTALL SERVICE
+   - Right-click install_service.bat
+   - Select "Run as Administrator"
+   - Wait for "Installation complete" message
+
+3. VERIFY
+   - Service starts automatically
+   - Check: Services → "RDP Security Service - Auth Failures Blocker"
+   - Status should be "Running"
+
+4. CONFIGURE (Optional)
+   - Double-click RDPMonitor.exe (no admin needed)
+   - Go to "Налаштування" (Settings) tab
+   - Adjust block levels if needed
+   - Enable Telegram notifications if desired
+
+DONE! Your RDP is now protected.
+
+===============================================
+
+TELEGRAM SETUP (Optional, 2 minutes):
+-------------------------------------
+
+1. CREATE BOT
+   - Open Telegram, search for @BotFather
+   - Send: /newbot
+   - Follow instructions, get Bot Token
+
+2. GET CHAT ID
+   - Search for @userinfobot
+   - Send any message, get your Chat ID
+
+3. CONFIGURE IN MONITOR
+   - Open RDPMonitor.exe
+   - Go to "Налаштування" tab
+   - Enable Telegram checkbox
+   - Paste Bot Token and Chat ID
+   - Click "Test Connection"
+   - If OK → Click "Save"
+
+You'll now receive alerts in Telegram!
+
+===============================================
+
+DAILY USAGE:
+------------
+
+Monitor UI (RDPMonitor.exe):
+- View real-time logs
+- See blocked IPs
+- Unblock IPs (double-click IP, then click Unblock)
+- Add IPs to whitelist
+- Manually block specific IPs
+- Start/Stop/Restart service
+
+Management Scripts (Run as Admin):
+- start_service.bat     → Start protection
+- stop_service.bat      → Stop protection
+- restart_all.bat       → Restart everything
+- uninstall_service.bat → Remove service
+
+===============================================
+
+COMMON TASKS:
+-------------
+
+UNBLOCK AN IP:
+1. Open RDPMonitor.exe
+2. Go to "Заблоковані IP" tab
+3. Double-click the IP address
+4. Click "🔓 Розблокувати IP"
+
+ADD IP TO WHITELIST (never blocks):
+1. Open RDPMonitor.exe
+2. Go to "Білий список" tab
+3. Enter IP address
+4. Click "➕ Додати IP"
+
+BLOCK IP MANUALLY:
+1. Open RDPMonitor.exe
+2. Go to "Ручне блокування" tab
+3. Enter IP and duration (minutes)
+4. Click "🚫 Заблокувати IP"
+
+CHANGE BLOCK SETTINGS:
+1. Open RDPMonitor.exe
+2. Go to "Налаштування" tab
+3. Adjust attempts/duration
+4. Click "💾 Зберегти конфігурацію"
+
+===============================================
+
+TROUBLESHOOTING:
+----------------
+
+Service won't start:
+- Check Event Viewer → Windows Logs → Application
+- Verify .NET 8.0 Runtime is installed
+- Run install_service.bat again as Admin
+
+Monitor shows no blocked IPs:
+- Click "🔄 Оновити" button
+- Check firewall rule exists: Run → firewall.cpl
+- Look for rule named "RDP_BLOCK_ALL"
+
+Telegram not working:
+- Verify Bot Token and Chat ID are correct
+- Click "Test Connection" in Monitor
+- Check internet connectivity
+- Ensure bot is not blocked
+
+Need to reset configuration:
+- Delete: C:\ProgramData\RDPSecurityService\config.json
+- Restart service (it will create default config)
+
+===============================================
+
+LOCATIONS:
+----------
+
+Service Executable:
+  C:\Program Files\RDPSecurityService\WinService.exe
+
+Configuration:
+  C:\ProgramData\RDPSecurityService\config.json
+
+Logs:
+  C:\ProgramData\RDPSecurityService\service.log
+  C:\ProgramData\RDPSecurityService\access.log
+  C:\ProgramData\RDPSecurityService\block_list.log
+  C:\ProgramData\RDPSecurityService\whiteList.log
+
+Monitor App:
+  (Portable - run from extracted folder)
+
+===============================================
+
+SUPPORT:
+--------
+
+Check service status:
+  services.msc → Look for "RDP Security Service"
+
+View live logs:
+  Open RDPMonitor.exe → "Поточні логи" tab
+
+Firewall rule:
+  firewall.cpl → Inbound Rules → "RDP_BLOCK_ALL"
+
+===============================================

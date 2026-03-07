@@ -1,6 +1,7 @@
 ﻿using System;
 using System.ServiceProcess;
 using System.Net;
+using System.Net.Http;
 using System.Net.Sockets;
 using System.Threading;
 using System.IO;
@@ -127,6 +128,7 @@ class Program
         private volatile int blockMinutes = DEFAULT_BLOCK_MINUTES;
         private volatile int rdpPort = DEFAULT_RDP_PORT;
         private volatile List<BlockLevel> blockLevels = new List<BlockLevel> { new BlockLevel { Attempts = 3, BlockMinutes = 20 } };
+        private volatile TelegramConfig? telegramConfig = null;
         // private volatile GateConfig gateConfig = new GateConfig { Enabled = false, ListenPort = 3389, TargetHost = "127.0.0.1", TargetPort = 3389 };
 
         private string banDbPath = "";
@@ -188,6 +190,7 @@ class Program
 
             WriteLog("RDP Security Service started. Monitoring authentication failures...");
             WriteLog($"Logs directory: {logDirectory}");
+            WriteLog($"Telegram notifications: {(telegramConfig?.Enabled == true ? "ENABLED" : "DISABLED")}");
 
             monitorThread = new Thread(MonitorAuthenticationFailures);
             monitorThread.IsBackground = true;
@@ -217,11 +220,17 @@ class Program
 
             WriteLog("Authentication monitoring thread started.");
             // TryStartGate(); // Legacy gate functionality disabled
+            
+            // Send start notification to Telegram
+            SendServiceNotification("🚀 СТАРТАНУЛ");
         }
 
         protected override void OnStop()
         {
             isRunning = false;
+            
+            // Send stop notification to Telegram
+            SendServiceNotification("⛔ УПАЛ");
             // try { gateListener?.Stop(); } catch { }
 
             if (monitorThread != null)
@@ -244,6 +253,8 @@ class Program
                 }
             }
             catch { }
+            
+            WriteLog("RDP Security Service stopping...");
 
             try
             {
@@ -320,11 +331,63 @@ class Program
                 catch (Exception ex)
                 {
                     WriteLog($"Monitor error: {ex.Message}");
+                    SendServiceNotification($"🔴 УПАЛ: {ex.Message}");
                 }
 
                 Thread.Sleep(CHECK_INTERVAL);
             }
         }
+        
+        private void SendServiceNotification(string message)
+        {
+            try
+            {
+                var cfg = telegramConfig;
+                if (cfg == null || !cfg.Enabled || string.IsNullOrWhiteSpace(cfg.BotToken) || string.IsNullOrWhiteSpace(cfg.ChatId))
+                {
+                    WriteLog($"Telegram disabled or not configured. Message not sent: {message}");
+                    return;
+                }
+
+                WriteLog($"Sending Telegram notification: {message}");
+                
+                using (var client = new System.Net.Http.HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(10);
+                    var url = $"https://api.telegram.org/bot{cfg.BotToken}/sendMessage";
+                    var content = new System.Net.Http.FormUrlEncodedContent(new[]
+                    {
+                        new KeyValuePair<string, string>("chat_id", cfg.ChatId),
+                        new KeyValuePair<string, string>("text", message)
+                    });
+                    
+                    var task = client.PostAsync(url, content);
+                    task.Wait(TimeSpan.FromSeconds(10));
+                    
+                    if (task.IsCompletedSuccessfully)
+                    {
+                        var response = task.Result;
+                        if (response.IsSuccessStatusCode)
+                        {
+                            WriteLog($"Telegram notification sent successfully");
+                        }
+                        else
+                        {
+                            WriteLog($"Service notification failed: {response.StatusCode}");
+                        }
+                    }
+                    else if (task.IsFaulted)
+                    {
+                        WriteLog($"Service notification request failed: {task.Exception?.InnerException?.Message}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteLog($"Service notification error: {ex.Message}");
+            }
+        }
+        
         private bool IsFailedLogonEvent(EventLogEntry entry)
         {
             try
@@ -532,6 +595,84 @@ class Program
 
             // РџРѕСЃР»Рµ Р·Р°РїРёСЃРё РІ С„Р°Р№Р» РѕР±РЅРѕРІР»СЏРµРј РµРґРёРЅРѕРµ РїСЂР°РІРёР»Рѕ
             try { UpdateFirewallRuleFromBlockList(); } catch { }
+
+            // Send Telegram notification
+            try { SendTelegramNotification(ipAddress, attemptCount, blockMinutes, untilLocal); } catch { }
+        }
+
+        private async void SendTelegramNotification(string ipAddress, int attemptCount, int blockMinutes, DateTime untilLocal)
+        {
+            try
+            {
+                var cfg = telegramConfig;
+                if (cfg == null || !cfg.Enabled || string.IsNullOrWhiteSpace(cfg.BotToken) || string.IsNullOrWhiteSpace(cfg.ChatId))
+                    return;
+
+                // Determine which level template to use
+                string templateKey = "default";
+                var levels = blockLevels;
+                if (levels != null && levels.Count > 0)
+                {
+                    for (int i = 0; i < levels.Count; i++)
+                    {
+                        if (attemptCount <= levels[i].Attempts)
+                        {
+                            templateKey = $"level{i + 1}";
+                            break;
+                        }
+                    }
+                    // If attempts exceed all levels, use the last level
+                    if (templateKey == "default" && attemptCount > levels[levels.Count - 1].Attempts)
+                    {
+                        templateKey = $"level{levels.Count}";
+                    }
+                }
+
+                // Get template
+                string template;
+                if (cfg.MessageTemplates != null && cfg.MessageTemplates.ContainsKey(templateKey))
+                {
+                    template = cfg.MessageTemplates[templateKey];
+                }
+                else if (cfg.MessageTemplates != null && cfg.MessageTemplates.ContainsKey("default"))
+                {
+                    template = cfg.MessageTemplates["default"];
+                }
+                else
+                {
+                    // Fallback template
+                    template = "🚨 RDP Security Alert\\n\\nBlocked IP: {ip}\\nAttempts: {attempts}\\nBan: {duration} min";
+                }
+
+                // Replace placeholders
+                string message = template
+                    .Replace("{ip}", ipAddress)
+                    .Replace("{attempts}", attemptCount.ToString())
+                    .Replace("{duration}", blockMinutes.ToString())
+                    .Replace("\\n", "\n");
+
+                using (var client = new System.Net.Http.HttpClient())
+                {
+                    client.Timeout = TimeSpan.FromSeconds(10);
+                    var url = $"https://api.telegram.org/bot{cfg.BotToken}/sendMessage";
+                    var content = new System.Net.Http.FormUrlEncodedContent(new[]
+                    {
+                        new KeyValuePair<string, string>("chat_id", cfg.ChatId),
+                        new KeyValuePair<string, string>("text", message),
+                        new KeyValuePair<string, string>("parse_mode", "Markdown")
+                    });
+                    
+                    var response = await client.PostAsync(url, content);
+                    if (!response.IsSuccessStatusCode)
+                    {
+                        WriteLog($"Telegram notification failed: {response.StatusCode}");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                WriteLog($"Telegram send error: {ex.Message}");
+            }
         }
 
         private void UpdateFirewallRuleFromBlockList()
@@ -601,9 +742,30 @@ class Program
 
                 if (string.IsNullOrWhiteSpace(remoteIPList))
                 {
-                    // delete the rule if exists using netsh
+                    // Delete the rule if it exists
                     try
                     {
+                        // Check if rule exists first
+                        var checkPsi = new ProcessStartInfo
+                        {
+                            FileName = "netsh.exe",
+                            Arguments = "advfirewall firewall show rule name=\"RDP_BLOCK_ALL\"",
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                            RedirectStandardOutput = true,
+                            RedirectStandardError = true
+                        };
+                        using (var checkProc = Process.Start(checkPsi))
+                        {
+                            checkProc.WaitForExit(3000);
+                            if (checkProc.ExitCode != 0)
+                            {
+                                // Rule doesn't exist, nothing to do
+                                return;
+                            }
+                        }
+
+                        // Rule exists, delete it
                         var psi = new ProcessStartInfo
                         {
                             FileName = "netsh.exe",
@@ -616,12 +778,15 @@ class Program
                         using (var p = Process.Start(psi))
                         {
                             p.WaitForExit(5000);
-                            WriteLog("RDP_BLOCK_ALL deleted (no blocked IPs)");
+                            if (p.ExitCode == 0)
+                            {
+                                WriteLog("RDP_BLOCK_ALL deleted (no blocked IPs)");
+                            }
                         }
                     }
-                    catch (Exception ex)
+                    catch
                     {
-                        WriteLog($"RDP_BLOCK_ALL delete failed: {ex.Message}");
+                        // Ignore errors - rule may already be deleted
                     }
                     return;
                 }
@@ -907,6 +1072,9 @@ class Program
 
                     int port = cfg.Port.HasValue ? cfg.Port.Value : DEFAULT_RDP_PORT;
                     rdpPort = Math.Max(1, port);
+
+                    // Load Telegram configuration
+                    telegramConfig = cfg.Telegram ?? new TelegramConfig { Enabled = false, BotToken = "", ChatId = "" };
                 }
             }
             catch (Exception ex)
@@ -1007,6 +1175,9 @@ CREATE TABLE IF NOT EXISTS bans (
         [JsonPropertyName("levels")]
         public List<BlockLevel> Levels { get; set; } = new List<BlockLevel>();
 
+        [JsonPropertyName("telegram")]
+        public TelegramConfig? Telegram { get; set; }
+
         public static ServiceConfig CreateDefault()
         {
             return new ServiceConfig
@@ -1017,9 +1188,37 @@ CREATE TABLE IF NOT EXISTS bans (
                     new BlockLevel { Attempts = 3, BlockMinutes = 30 },
                     new BlockLevel { Attempts = 5, BlockMinutes = 180 },
                     new BlockLevel { Attempts = 7, BlockMinutes = 2880 }
+                },
+                Telegram = new TelegramConfig
+                {
+                    Enabled = false,
+                    BotToken = "",
+                    ChatId = "",
+                    MessageTemplates = new Dictionary<string, string>
+                    {
+                        ["level1"] = "🟡 RDP Alert LEVEL 1\n\nIP: {ip}\nAttempts: {attempts}\nBan: {duration} min",
+                        ["level2"] = "🟠 RDP Alert LEVEL 2\n\nIP: {ip}\nAttempts: {attempts}\nBan: {duration} min",
+                        ["level3"] = "🔴 RDP Alert LEVEL 3\n\nIP: {ip}\nAttempts: {attempts}\nBan: {duration} min",
+                        ["default"] = "🚨 RDP Security Alert\n\nBlocked IP: {ip}\nAttempts: {attempts}\nBan: {duration} min"
+                    }
                 }
             };
         }
+    }
+
+    public class TelegramConfig
+    {
+        [JsonPropertyName("enabled")]
+        public bool Enabled { get; set; }
+
+        [JsonPropertyName("botToken")]
+        public string BotToken { get; set; } = "";
+
+        [JsonPropertyName("chatId")]
+        public string ChatId { get; set; } = "";
+
+        [JsonPropertyName("messageTemplates")]
+        public Dictionary<string, string> MessageTemplates { get; set; } = new Dictionary<string, string>();
     }
 
     public class BlockLevel

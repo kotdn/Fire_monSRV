@@ -33,6 +33,7 @@ namespace RDPMonitor
             ["TAB_WHITE_LIST"] = new Dictionary<string, string> { ["UA"] = "Білий список", ["EN"] = "White List" },
             ["TAB_MANUAL_BLOCK"] = new Dictionary<string, string> { ["UA"] = "Ручне блокування", ["EN"] = "Manual Block" },
             ["TAB_SETTINGS"] = new Dictionary<string, string> { ["UA"] = "Налаштування", ["EN"] = "Settings" },
+            ["TAB_ALERTS"] = new Dictionary<string, string> { ["UA"] = "Налаштування АЛЕРТС", ["EN"] = "ALERTS Settings" },
             
             ["SECTION_BANNED_IPS"] = new Dictionary<string, string> { ["UA"] = "Заблоковані IP-адреси:", ["EN"] = "Blocked IPs:" },
             ["SECTION_WHITE_LIST"] = new Dictionary<string, string> { ["UA"] = "Білий список IP (авторозблокування):", ["EN"] = "IP Whitelist (Auto-unlock):" },
@@ -57,8 +58,43 @@ namespace RDPMonitor
             
             ["GRID_FAILED_ATTEMPTS"] = new Dictionary<string, string> { ["UA"] = "Невдалих спроб", ["EN"] = "Failed Attempts" },
             ["GRID_BLOCK_DURATION"] = new Dictionary<string, string> { ["UA"] = "Тривалість блокування (хв)", ["EN"] = "Block Duration (min)" },
-            ["GRID_ATTEMPTS"] = new Dictionary<string, string> { ["UA"] = "Спроби", ["EN"] = "Attempts" },
+            ["GRID_ATTEMPTS"] = new Dictionary<string, string> { ["UA"] = "Спроми", ["EN"] = "Attempts" },
             ["GRID_BLOCK_MINUTES"] = new Dictionary<string, string> { ["UA"] = "Хвилини блокування", ["EN"] = "Block Minutes" },
+            
+            ["MSG_NO_BLOCKED_IPS"] = new Dictionary<string, string> { ["UA"] = "(немає заблокованих IP)", ["EN"] = "(no blocked IPs)" },
+            ["MSG_NO_WHITELISTED_IPS"] = new Dictionary<string, string> { ["UA"] = "(немає IP у білому списку)", ["EN"] = "(no whitelisted IPs)" },
+            
+            ["LABEL_BLOCK_DURATION_FULL"] = new Dictionary<string, string> { ["UA"] = "Тривалість блокування (хвилини):", ["EN"] = "Block Duration (minutes):" },
+            ["LABEL_RDP_PORT"] = new Dictionary<string, string> { ["UA"] = "Порт RDP:", ["EN"] = "RDP Port:" },
+            ["LABEL_BLOCK_LEVELS_TABLE"] = new Dictionary<string, string> { ["UA"] = "Рівні блокування (Спроби → Хвилини):", ["EN"] = "Block Levels (Attempts – Minutes):" },
+            ["COL_ATTEMPTS"] = new Dictionary<string, string> { ["UA"] = "Спроби", ["EN"] = "Attempts" },
+            ["COL_BLOCK_MINUTES"] = new Dictionary<string, string> { ["UA"] = "Хвилини блокування", ["EN"] = "Block Minutes" },
+            
+            // Telegram notifications
+            ["TELEGRAM_SECTION_HEADER"] = new Dictionary<string, string> { ["UA"] = "Налаштування Telegram сповіщень", ["EN"] = "Telegram Notifications Settings" },
+            ["TELEGRAM_ENABLE"] = new Dictionary<string, string> { ["UA"] = "Увімкнути Telegram сповіщення", ["EN"] = "Enable Telegram Notifications" },
+            ["TELEGRAM_BOT_TOKEN"] = new Dictionary<string, string> { ["UA"] = "Bot Token:", ["EN"] = "Bot Token:" },
+            ["TELEGRAM_CHAT_ID"] = new Dictionary<string, string> { ["UA"] = "Chat ID:", ["EN"] = "Chat ID:" },
+            ["TELEGRAM_BOT_TOKEN_PLACEHOLDER"] = new Dictionary<string, string> { ["UA"] = "Вставте токен бота (від @BotFather)", ["EN"] = "Paste bot token (from @BotFather)" },
+            ["TELEGRAM_CHAT_ID_PLACEHOLDER"] = new Dictionary<string, string> { ["UA"] = "Вставте Chat ID", ["EN"] = "Paste Chat ID" },
+            ["TELEGRAM_TEST_BUTTON"] = new Dictionary<string, string> { ["UA"] = "Тестове повідомлення", ["EN"] = "Test Message" },
+            ["TELEGRAM_SAVE_BUTTON"] = new Dictionary<string, string> { ["UA"] = "Зберегти налаштування", ["EN"] = "Save Settings" },
+            ["TELEGRAM_HELP_TITLE"] = new Dictionary<string, string> { ["UA"] = "Як налаштувати Telegram бота:", ["EN"] = "How to setup Telegram bot:" },
+            ["TELEGRAM_HELP_STEP1"] = new Dictionary<string, string> { ["UA"] = "1. Знайдіть @BotFather в Telegram", ["EN"] = "1. Find @BotFather in Telegram" },
+            ["TELEGRAM_HELP_STEP2"] = new Dictionary<string, string> { ["UA"] = "2. Надішліть /newbot і дотримуйтесь інструкцій", ["EN"] = "2. Send /newbot and follow instructions" },
+            ["TELEGRAM_HELP_STEP3"] = new Dictionary<string, string> { ["UA"] = "3. Скопіюйте Bot Token і вставте вище", ["EN"] = "3. Copy Bot Token and paste above" },
+            ["TELEGRAM_HELP_STEP4"] = new Dictionary<string, string> { ["UA"] = "4. Знайдіть @userinfobot щоб дізнатись свій Chat ID", ["EN"] = "4. Find @userinfobot to get your Chat ID" },
+            ["TELEGRAM_HELP_STEP5"] = new Dictionary<string, string> { ["UA"] = "5. Натисніть 'Тестове повідомлення' для перевірки", ["EN"] = "5. Click 'Test Message' to verify" },
+            ["TELEGRAM_STATUS_DISABLED"] = new Dictionary<string, string> { ["UA"] = "Вимкнено", ["EN"] = "Disabled" },
+            ["TELEGRAM_STATUS_ENABLED"] = new Dictionary<string, string> { ["UA"] = "Увімкнено", ["EN"] = "Enabled" },
+            ["TELEGRAM_TEST_SUCCESS"] = new Dictionary<string, string> { ["UA"] = "Тестове повідомлення надіслано!", ["EN"] = "Test message sent!" },
+            ["TELEGRAM_TEST_FAIL"] = new Dictionary<string, string> { ["UA"] = "Помилка відправки. Перевірте налаштування.", ["EN"] = "Send failed. Check settings." },
+            ["TELEGRAM_SAVE_SUCCESS"] = new Dictionary<string, string> { ["UA"] = "Налаштування збережено!", ["EN"] = "Settings saved!" },
+            ["TELEGRAM_SAVE_FAIL"] = new Dictionary<string, string> { ["UA"] = "Помилка збереження!", ["EN"] = "Save failed!" },
+            ["TELEGRAM_MESSAGE_TEMPLATES"] = new Dictionary<string, string> { ["UA"] = "Шаблони повідомлень для рівнів блокування:", ["EN"] = "Message Templates for Block Levels:" },
+            ["TELEGRAM_TEMPLATE_LEVEL"] = new Dictionary<string, string> { ["UA"] = "Рівень", ["EN"] = "Level" },
+            ["TELEGRAM_TEMPLATE_DEFAULT"] = new Dictionary<string, string> { ["UA"] = "Шаблон за замовчуванням:", ["EN"] = "Default Template:" },
+            ["TELEGRAM_PLACEHOLDERS"] = new Dictionary<string, string> { ["UA"] = "Доступні змінні: {ip}, {attempts}, {duration}", ["EN"] = "Available variables: {ip}, {attempts}, {duration}" },
         };
 
         public static string Get(string key)
