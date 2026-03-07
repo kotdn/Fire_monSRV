@@ -13,5 +13,26 @@
       "attempts": 7,
       "blockMinutes": 2880
     }
-  ]
+  ],
+  "antiBrute": {
+    "enabled": true,
+    "spray": {
+      "enabled": true,
+      "windowMinutes": 10,
+      "uniqueIpsThreshold": 4,
+      "blockMinutes": 240
+    },
+    "recurrence": {
+      "enabled": true,
+      "lookbackHours": 24,
+      "stepMultiplier": 0.5,
+      "maxMultiplier": 4.0
+    },
+    "subnet": {
+      "enabled": true,
+      "windowMinutes": 30,
+      "uniqueIpsThreshold": 3,
+      "blockMinutes": 240
+    }
+  }
 }

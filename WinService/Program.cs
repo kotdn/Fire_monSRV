@@ -129,6 +129,7 @@ class Program
         private volatile int rdpPort = DEFAULT_RDP_PORT;
         private volatile List<BlockLevel> blockLevels = new List<BlockLevel> { new BlockLevel { Attempts = 3, BlockMinutes = 20 } };
         private volatile TelegramConfig? telegramConfig = null;
+        private volatile AntiBruteConfig antiBruteConfig = AntiBruteConfig.CreateDefault();
         // private volatile GateConfig gateConfig = new GateConfig { Enabled = false, ListenPort = 3389, TargetHost = "127.0.0.1", TargetPort = 3389 };
 
         private string banDbPath = "";
@@ -143,7 +144,14 @@ class Program
             public DateTime UntilLocal;
         }
 
+        private sealed class SprayState
+        {
+            public Dictionary<string, DateTime> SourceIps = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+        }
+
         private readonly Dictionary<string, BanState> bans = new Dictionary<string, BanState>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, BanState> subnetBans = new Dictionary<string, BanState>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, SprayState> sprayByUser = new Dictionary<string, SprayState>(StringComparer.OrdinalIgnoreCase);
 
         public RDPSecurityService()
         {
@@ -298,17 +306,19 @@ class Program
 
                                 WriteAccessLog(sourceIP, entry.TimeGenerated, failedAttempts[sourceIP]);
 
+                                string targetUser = ExtractTargetUser(entry);
+                                TryApplySprayBan(targetUser, sourceIP, entry.TimeGenerated, DateTime.Now);
+
                                 var level = GetLevelForAttempts(failedAttempts[sourceIP]);
                                 if (level != null && ShouldApplyBan(sourceIP, failedAttempts[sourceIP], level, DateTime.Now))
                                 {
-                                    DateTime until = DateTime.Now.AddMinutes(Math.Max(1, level.BlockMinutes));
-                                    WriteBlockLog(sourceIP, entry.TimeGenerated, failedAttempts[sourceIP], level.BlockMinutes, until);
-
-                                    bans[sourceIP] = new BanState
-                                    {
-                                        AppliedAttempts = level.Attempts,
-                                        UntilLocal = until
-                                    };
+                                    ApplyIpBan(
+                                        sourceIP,
+                                        entry.TimeGenerated,
+                                        failedAttempts[sourceIP],
+                                        level.BlockMinutes,
+                                        level.Attempts,
+                                        "per-ip-threshold");
                                 }
                             }
                             else
@@ -515,6 +525,359 @@ class Program
             return ip.ToString();
         }
 
+        private string ExtractTargetUser(EventLogEntry entry)
+        {
+            try
+            {
+                var rs = entry.ReplacementStrings;
+                if (rs != null)
+                {
+                    if (rs.Length > 5)
+                    {
+                        string candidate = NormalizeUserCandidate(rs[5]);
+                        if (!string.IsNullOrWhiteSpace(candidate))
+                            return candidate;
+                    }
+
+                    for (int i = 0; i < rs.Length; i++)
+                    {
+                        string candidate = NormalizeUserCandidate(rs[i]);
+                        if (!string.IsNullOrWhiteSpace(candidate))
+                            return candidate;
+                    }
+                }
+
+                string[] markers = new[]
+                {
+                    "Account For Which Logon Failed",
+                    "TargetUserName",
+                    "Имя учетной записи",
+                    "Учетная запись"
+                };
+
+                string eventMessage = entry.Message ?? string.Empty;
+                string[] lines = eventMessage.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+                foreach (string line in lines)
+                {
+                    if (markers.Any(m => line.IndexOf(m, StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        string candidate = NormalizeUserCandidate(line);
+                        if (!string.IsNullOrWhiteSpace(candidate))
+                            return candidate;
+                    }
+                }
+            }
+            catch { }
+
+            return string.Empty;
+        }
+
+        private string NormalizeUserCandidate(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return string.Empty;
+
+            string s = raw.Trim();
+            int colon = s.LastIndexOf(':');
+            if (colon >= 0 && colon < s.Length - 1)
+                s = s.Substring(colon + 1).Trim();
+
+            if (s.StartsWith(".", StringComparison.Ordinal))
+                return string.Empty;
+
+            if (s.Equals("-", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("ANONYMOUS LOGON", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("SYSTEM", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("LOCAL SERVICE", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("NETWORK SERVICE", StringComparison.OrdinalIgnoreCase) ||
+                s.Equals("N/A", StringComparison.OrdinalIgnoreCase))
+                return string.Empty;
+
+            if (s.Contains("\\", StringComparison.Ordinal))
+                s = s.Split('\\').LastOrDefault()?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(s))
+                return string.Empty;
+
+            return s;
+        }
+
+        private bool TryApplySprayBan(string targetUser, string sourceIp, DateTime eventTimeLocal, DateTime nowLocal)
+        {
+            var anti = antiBruteConfig;
+            if (anti == null || !anti.Enabled)
+                return false;
+
+            var cfg = anti.Spray;
+            if (cfg == null || !cfg.Enabled)
+                return false;
+
+            if (string.IsNullOrWhiteSpace(targetUser) || string.IsNullOrWhiteSpace(sourceIp))
+                return false;
+
+            int windowMinutes = Math.Max(1, cfg.WindowMinutes);
+            int uniqueIpsThreshold = Math.Max(2, cfg.UniqueIpsThreshold);
+            int sprayBlockMinutes = Math.Max(1, cfg.BlockMinutes);
+
+            string userKey = targetUser.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(userKey))
+                return false;
+
+            int uniqueCount;
+            if (!sprayByUser.TryGetValue(userKey, out SprayState state))
+            {
+                state = new SprayState();
+                sprayByUser[userKey] = state;
+            }
+
+            DateTime cutoff = nowLocal.AddMinutes(-windowMinutes);
+            var stale = state.SourceIps
+                .Where(p => p.Value < cutoff)
+                .Select(p => p.Key)
+                .ToList();
+
+            for (int i = 0; i < stale.Count; i++)
+                state.SourceIps.Remove(stale[i]);
+
+            state.SourceIps[sourceIp] = nowLocal;
+            uniqueCount = state.SourceIps.Count;
+
+            if (uniqueCount < uniqueIpsThreshold)
+                return false;
+
+            var sprayLevel = new BlockLevel { Attempts = uniqueIpsThreshold, BlockMinutes = sprayBlockMinutes };
+            if (!ShouldApplyBan(sourceIp, uniqueCount, sprayLevel, nowLocal))
+                return false;
+
+            ApplyIpBan(sourceIp, eventTimeLocal, uniqueCount, sprayLevel.BlockMinutes, sprayLevel.Attempts, $"spray user={targetUser}");
+            SendServiceNotification($"🧯 SPRAY: user={targetUser}, ip={sourceIp}, unique_ips={uniqueCount}, window={windowMinutes}m");
+            return true;
+        }
+
+        private void ApplyIpBan(string ipAddress, DateTime eventTimeLocal, int attemptCount, int requestedBlockMinutes, int appliedAttempts, string reason)
+        {
+            DateTime nowLocal = DateTime.Now;
+            int effectiveBlockMinutes = GetEffectiveBlockMinutes(ipAddress, requestedBlockMinutes, nowLocal);
+            DateTime until = nowLocal.AddMinutes(Math.Max(1, effectiveBlockMinutes));
+
+            WriteBlockLog(ipAddress, eventTimeLocal, attemptCount, effectiveBlockMinutes, until);
+
+            bans[ipAddress] = new BanState
+            {
+                AppliedAttempts = appliedAttempts,
+                UntilLocal = until
+            };
+
+            if (!string.IsNullOrWhiteSpace(reason))
+                WriteLog($"Ban applied ({reason}): {ipAddress} for {effectiveBlockMinutes}m (until {until:yyyy-MM-dd HH:mm:ss})");
+
+            TryEscalateSubnetBan(ipAddress, eventTimeLocal, nowLocal);
+        }
+
+        private int GetEffectiveBlockMinutes(string ipAddress, int baseMinutes, DateTime nowLocal)
+        {
+            int safeBaseMinutes = Math.Max(1, baseMinutes);
+            var anti = antiBruteConfig;
+            if (anti == null || !anti.Enabled)
+                return safeBaseMinutes;
+
+            var cfg = anti.Recurrence;
+            if (cfg == null || !cfg.Enabled)
+                return safeBaseMinutes;
+
+            int lookbackHours = Math.Max(1, cfg.LookbackHours);
+            double stepMultiplier = Math.Max(0.0, cfg.StepMultiplier);
+            double maxMultiplier = Math.Max(1.0, cfg.MaxMultiplier);
+
+            int recentBanCount = CountRecentIpBans(ipAddress, nowLocal.AddHours(-lookbackHours), nowLocal);
+            if (recentBanCount <= 0)
+                return safeBaseMinutes;
+
+            double factor = Math.Min(maxMultiplier, 1.0 + (recentBanCount * stepMultiplier));
+            int boosted = (int)Math.Ceiling(safeBaseMinutes * factor);
+            WriteLog($"Recurrence boost for {ipAddress}: history={recentBanCount}, factor={factor:F2}, minutes={boosted}");
+            return Math.Max(1, boosted);
+        }
+
+        private int CountRecentIpBans(string ipAddress, DateTime fromLocal, DateTime nowLocal)
+        {
+            if (string.IsNullOrWhiteSpace(ipAddress) || !File.Exists(blockListLogPath))
+                return 0;
+
+            int count = 0;
+            lock (logLock)
+            {
+                foreach (string line in File.ReadAllLines(blockListLogPath))
+                {
+                    if (!TryParseBlockLogTimestamp(line, out DateTime tsLocal))
+                        continue;
+
+                    if (tsLocal < fromLocal || tsLocal > nowLocal)
+                        continue;
+
+                    string target = ExtractBlockedTargetFromLine(line);
+                    if (!string.IsNullOrWhiteSpace(target) && target.Equals(ipAddress, StringComparison.OrdinalIgnoreCase))
+                        count++;
+                }
+            }
+
+            return count;
+        }
+
+        private void TryEscalateSubnetBan(string sourceIp, DateTime eventTimeLocal, DateTime nowLocal)
+        {
+            var anti = antiBruteConfig;
+            if (anti == null || !anti.Enabled)
+                return;
+
+            var cfg = anti.Subnet;
+            if (cfg == null || !cfg.Enabled)
+                return;
+
+            string subnet = GetSubnet24(sourceIp);
+            if (string.IsNullOrWhiteSpace(subnet))
+                return;
+
+            int windowMinutes = Math.Max(1, cfg.WindowMinutes);
+            int uniqueIpsThreshold = Math.Max(2, cfg.UniqueIpsThreshold);
+            int subnetBlockMinutes = Math.Max(1, cfg.BlockMinutes);
+
+            int recentUniqueIps = CountRecentBlockedIpsInSubnet(subnet, nowLocal.AddMinutes(-windowMinutes), nowLocal);
+            if (recentUniqueIps < uniqueIpsThreshold)
+                return;
+
+            if (subnetBans.TryGetValue(subnet, out BanState state))
+            {
+                if (nowLocal <= state.UntilLocal)
+                    return;
+
+                subnetBans.Remove(subnet);
+            }
+
+            var whitelist = LoadWhitelistSet();
+            if (SubnetContainsWhitelistedIp(subnet, whitelist))
+            {
+                WriteLog($"Subnet escalation skipped due to whitelist overlap: {subnet}");
+                return;
+            }
+
+            DateTime until = nowLocal.AddMinutes(subnetBlockMinutes);
+            WriteSubnetBlockLog(subnet, eventTimeLocal, recentUniqueIps, subnetBlockMinutes, until);
+
+            subnetBans[subnet] = new BanState
+            {
+                AppliedAttempts = recentUniqueIps,
+                UntilLocal = until
+            };
+
+            SendServiceNotification($"🚫 SUBNET BLOCK: {subnet} | Unique IPs: {recentUniqueIps} | Ban: {subnetBlockMinutes} min");
+        }
+
+        private void WriteSubnetBlockLog(string subnetCidr, DateTime timestamp, int triggerCount, int blockMinutesValue, DateTime untilLocal)
+        {
+            try
+            {
+                lock (logLock)
+                {
+                    string logEntry =
+                        $"[{timestamp:yyyy-MM-dd HH:mm:ss}] BLOCKED NET: {subnetCidr} | Triggers: {triggerCount} | BlockMinutes: {blockMinutesValue} | Until: {untilLocal:yyyy-MM-dd HH:mm:ss}";
+                    File.AppendAllText(blockListLogPath, logEntry + Environment.NewLine, Encoding.UTF8);
+                }
+            }
+            catch { }
+
+            try { UpdateFirewallRuleFromBlockList(); } catch { }
+        }
+
+        private int CountRecentBlockedIpsInSubnet(string subnetCidr, DateTime fromLocal, DateTime nowLocal)
+        {
+            if (string.IsNullOrWhiteSpace(subnetCidr) || !File.Exists(blockListLogPath))
+                return 0;
+
+            var uniqueIps = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            lock (logLock)
+            {
+                foreach (string line in File.ReadAllLines(blockListLogPath))
+                {
+                    if (!TryParseBlockLogTimestamp(line, out DateTime tsLocal))
+                        continue;
+
+                    if (tsLocal < fromLocal || tsLocal > nowLocal)
+                        continue;
+
+                    string target = ExtractBlockedTargetFromLine(line);
+                    if (string.IsNullOrWhiteSpace(target))
+                        continue;
+
+                    if (target.Contains("/", StringComparison.Ordinal))
+                        continue;
+
+                    if (IsIpv4InSubnet24(target, subnetCidr))
+                        uniqueIps.Add(target);
+                }
+            }
+
+            return uniqueIps.Count;
+        }
+
+        private string GetSubnet24(string ipAddress)
+        {
+            if (!IPAddress.TryParse(ipAddress, out IPAddress ip))
+                return null;
+
+            if (ip.AddressFamily != AddressFamily.InterNetwork)
+                return null;
+
+            byte[] bytes = ip.GetAddressBytes();
+            return $"{bytes[0]}.{bytes[1]}.{bytes[2]}.0/24";
+        }
+
+        private bool IsIpv4InSubnet24(string ipAddress, string subnetCidr)
+        {
+            if (!IPAddress.TryParse(ipAddress, out IPAddress ip))
+                return false;
+
+            if (ip.AddressFamily != AddressFamily.InterNetwork)
+                return false;
+
+            if (!TryParseSubnet24(subnetCidr, out byte[] netBytes))
+                return false;
+
+            byte[] bytes = ip.GetAddressBytes();
+            return bytes[0] == netBytes[0] && bytes[1] == netBytes[1] && bytes[2] == netBytes[2];
+        }
+
+        private bool SubnetContainsWhitelistedIp(string subnetCidr, HashSet<string> whitelist)
+        {
+            if (whitelist == null || whitelist.Count == 0)
+                return false;
+
+            foreach (string ip in whitelist)
+            {
+                if (IsIpv4InSubnet24(ip, subnetCidr))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private bool TryParseSubnet24(string subnetCidr, out byte[] netBytes)
+        {
+            netBytes = null;
+            if (string.IsNullOrWhiteSpace(subnetCidr))
+                return false;
+
+            string[] parts = subnetCidr.Trim().Split('/');
+            if (parts.Length != 2 || parts[1] != "24")
+                return false;
+
+            if (!IPAddress.TryParse(parts[0], out IPAddress net) || net.AddressFamily != AddressFamily.InterNetwork)
+                return false;
+
+            netBytes = net.GetAddressBytes();
+            return true;
+        }
+
         private void OnLogChanged(object sender, FileSystemEventArgs e)
         {
             try
@@ -680,7 +1043,7 @@ class Program
             try
             {
                 var whitelist = LoadWhitelistSet();
-                List<string> blockedIPs = new List<string>();
+                List<string> blockedTargets = new List<string>();
                 bool blockListPruned = false;
                 bool expiredPruned = false;
                 DateTime now = DateTime.Now;
@@ -716,16 +1079,26 @@ class Program
                                 }
                             }
 
-                            string ip = ExtractBlockedIpFromLine(line);
-                            if (!string.IsNullOrWhiteSpace(ip) && whitelist.Contains(ip))
+                            string target = ExtractBlockedTargetFromLine(line);
+                            if (!string.IsNullOrWhiteSpace(target) &&
+                                !target.Contains("/", StringComparison.Ordinal) &&
+                                whitelist.Contains(target))
                             {
                                 blockListPruned = true;
                                 continue; // whitelist has priority; remove from block list file
                             }
 
+                            if (!string.IsNullOrWhiteSpace(target) &&
+                                target.Contains("/", StringComparison.Ordinal) &&
+                                SubnetContainsWhitelistedIp(target, whitelist))
+                            {
+                                blockListPruned = true;
+                                continue; // do not keep subnet block that overlaps explicit whitelist
+                            }
+
                             keptLines.Add(line);
-                            if (!string.IsNullOrWhiteSpace(ip) && !blockedIPs.Contains(ip))
-                                blockedIPs.Add(ip);
+                            if (!string.IsNullOrWhiteSpace(target) && !blockedTargets.Contains(target))
+                                blockedTargets.Add(target);
                         }
 
                         if (blockListPruned || expiredPruned)
@@ -738,7 +1111,7 @@ class Program
                 if (expiredPruned)
                     WriteLog($"Pruned expired IPs from block_list.log (default TTL={defaultTtlMinutes}m)");
 
-                string remoteIPList = string.Join(",", blockedIPs);
+                string remoteIPList = string.Join(",", blockedTargets);
 
                 if (string.IsNullOrWhiteSpace(remoteIPList))
                 {
@@ -811,9 +1184,9 @@ class Program
                         p.WaitForExit(3000);
                     }
 
-                    // Build IP list with /32 for each IP
-                    string[] ips = blockedIPs.ToArray();
-                    string remoteIpList = string.Join(",", ips.Select(ip => ip + "/32"));
+                    // Build target list: IPs become /32, CIDRs are kept as is
+                    string[] targets = blockedTargets.ToArray();
+                    string remoteIpList = string.Join(",", targets.Select(t => t.Contains("/", StringComparison.Ordinal) ? t : t + "/32"));
 
                     // Create new rule with netsh
                     var addPsi = new ProcessStartInfo
@@ -993,17 +1366,35 @@ class Program
             return set;
         }
 
-        private string ExtractBlockedIpFromLine(string line)
+        private string ExtractBlockedTargetFromLine(string line)
         {
             if (string.IsNullOrWhiteSpace(line))
                 return null;
 
-            int idx = line.IndexOf("BLOCKED IP:", StringComparison.OrdinalIgnoreCase);
-            if (idx < 0)
+            int ipIdx = line.IndexOf("BLOCKED IP:", StringComparison.OrdinalIgnoreCase);
+            if (ipIdx >= 0)
+            {
+                string ip = line.Substring(ipIdx + 11).Split('|')[0].Trim();
+                return System.Net.IPAddress.TryParse(ip, out _) ? ip : null;
+            }
+
+            int netIdx = line.IndexOf("BLOCKED NET:", StringComparison.OrdinalIgnoreCase);
+            if (netIdx >= 0)
+            {
+                string subnet = line.Substring(netIdx + 12).Split('|')[0].Trim();
+                return TryParseSubnet24(subnet, out _) ? subnet : null;
+            }
+
+            return null;
+        }
+
+        private string ExtractBlockedIpFromLine(string line)
+        {
+            string target = ExtractBlockedTargetFromLine(line);
+            if (string.IsNullOrWhiteSpace(target) || target.Contains("/", StringComparison.Ordinal))
                 return null;
 
-            string ip = line.Substring(idx + 11).Split('|')[0].Trim();
-            return System.Net.IPAddress.TryParse(ip, out _) ? ip : null;
+            return target;
         }
 
         private bool TryParseBlockLogTimestamp(string line, out DateTime timestampLocal)
@@ -1033,6 +1424,7 @@ class Program
                 lock (configLock)
                 {
                     ServiceConfig cfg = null;
+                    bool shouldRewriteConfig = false;
                     if (File.Exists(configPath))
                     {
                         try
@@ -1049,7 +1441,20 @@ class Program
                     if (cfg == null)
                     {
                         cfg = ServiceConfig.CreateDefault();
+                        shouldRewriteConfig = true;
                         File.WriteAllText(configPath, JsonSerializer.Serialize(cfg, ServiceConfigJson.Options));
+                    }
+
+                    if (cfg.Telegram == null)
+                    {
+                        cfg.Telegram = new TelegramConfig { Enabled = false, BotToken = "", ChatId = "" };
+                        shouldRewriteConfig = true;
+                    }
+
+                    if (cfg.AntiBrute == null)
+                    {
+                        cfg.AntiBrute = AntiBruteConfig.CreateDefault();
+                        shouldRewriteConfig = true;
                     }
 
                     var levels = (cfg.Levels ?? new List<BlockLevel>())
@@ -1061,7 +1466,8 @@ class Program
                     if (levels.Count == 0)
                     {
                         levels = ServiceConfig.CreateDefault().Levels;
-                        File.WriteAllText(configPath, JsonSerializer.Serialize(new ServiceConfig { Levels = levels }, ServiceConfigJson.Options));
+                        cfg.Levels = levels;
+                        shouldRewriteConfig = true;
                     }
 
                     blockLevels = levels;
@@ -1075,6 +1481,12 @@ class Program
 
                     // Load Telegram configuration
                     telegramConfig = cfg.Telegram ?? new TelegramConfig { Enabled = false, BotToken = "", ChatId = "" };
+
+                    // Load anti-brute configuration
+                    antiBruteConfig = NormalizeAntiBruteConfig(cfg.AntiBrute);
+
+                    if (shouldRewriteConfig)
+                        File.WriteAllText(configPath, JsonSerializer.Serialize(cfg, ServiceConfigJson.Options));
                 }
             }
             catch (Exception ex)
@@ -1083,7 +1495,30 @@ class Program
                 failedAttemptsThreshold = DEFAULT_FAILED_ATTEMPTS_THRESHOLD;
                 blockMinutes = DEFAULT_BLOCK_MINUTES;
                 blockLevels = new List<BlockLevel> { new BlockLevel { Attempts = 3, BlockMinutes = 20 } };
+                antiBruteConfig = AntiBruteConfig.CreateDefault();
             }
+        }
+
+        private AntiBruteConfig NormalizeAntiBruteConfig(AntiBruteConfig? cfg)
+        {
+            cfg ??= AntiBruteConfig.CreateDefault();
+
+            cfg.Spray ??= SprayConfig.CreateDefault();
+            cfg.Spray.WindowMinutes = Math.Max(1, cfg.Spray.WindowMinutes);
+            cfg.Spray.UniqueIpsThreshold = Math.Max(2, cfg.Spray.UniqueIpsThreshold);
+            cfg.Spray.BlockMinutes = Math.Max(1, cfg.Spray.BlockMinutes);
+
+            cfg.Recurrence ??= RecurrenceConfig.CreateDefault();
+            cfg.Recurrence.LookbackHours = Math.Max(1, cfg.Recurrence.LookbackHours);
+            cfg.Recurrence.StepMultiplier = Math.Max(0.0, cfg.Recurrence.StepMultiplier);
+            cfg.Recurrence.MaxMultiplier = Math.Max(1.0, cfg.Recurrence.MaxMultiplier);
+
+            cfg.Subnet ??= SubnetConfig.CreateDefault();
+            cfg.Subnet.WindowMinutes = Math.Max(1, cfg.Subnet.WindowMinutes);
+            cfg.Subnet.UniqueIpsThreshold = Math.Max(2, cfg.Subnet.UniqueIpsThreshold);
+            cfg.Subnet.BlockMinutes = Math.Max(1, cfg.Subnet.BlockMinutes);
+
+            return cfg;
         }
 
         private BlockLevel GetLevelForAttempts(int attempts)
@@ -1178,6 +1613,9 @@ CREATE TABLE IF NOT EXISTS bans (
         [JsonPropertyName("telegram")]
         public TelegramConfig? Telegram { get; set; }
 
+        [JsonPropertyName("antiBrute")]
+        public AntiBruteConfig? AntiBrute { get; set; }
+
         public static ServiceConfig CreateDefault()
         {
             return new ServiceConfig
@@ -1201,7 +1639,112 @@ CREATE TABLE IF NOT EXISTS bans (
                         ["level3"] = "🔴 RDP Alert LEVEL 3\n\nIP: {ip}\nAttempts: {attempts}\nBan: {duration} min",
                         ["default"] = "🚨 RDP Security Alert\n\nBlocked IP: {ip}\nAttempts: {attempts}\nBan: {duration} min"
                     }
-                }
+                },
+                AntiBrute = AntiBruteConfig.CreateDefault()
+            };
+        }
+    }
+
+    public class AntiBruteConfig
+    {
+        [JsonPropertyName("enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [JsonPropertyName("spray")]
+        public SprayConfig Spray { get; set; } = SprayConfig.CreateDefault();
+
+        [JsonPropertyName("recurrence")]
+        public RecurrenceConfig Recurrence { get; set; } = RecurrenceConfig.CreateDefault();
+
+        [JsonPropertyName("subnet")]
+        public SubnetConfig Subnet { get; set; } = SubnetConfig.CreateDefault();
+
+        public static AntiBruteConfig CreateDefault()
+        {
+            return new AntiBruteConfig
+            {
+                Enabled = true,
+                Spray = SprayConfig.CreateDefault(),
+                Recurrence = RecurrenceConfig.CreateDefault(),
+                Subnet = SubnetConfig.CreateDefault()
+            };
+        }
+    }
+
+    public class SprayConfig
+    {
+        [JsonPropertyName("enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [JsonPropertyName("windowMinutes")]
+        public int WindowMinutes { get; set; } = 10;
+
+        [JsonPropertyName("uniqueIpsThreshold")]
+        public int UniqueIpsThreshold { get; set; } = 4;
+
+        [JsonPropertyName("blockMinutes")]
+        public int BlockMinutes { get; set; } = 240;
+
+        public static SprayConfig CreateDefault()
+        {
+            return new SprayConfig
+            {
+                Enabled = true,
+                WindowMinutes = 10,
+                UniqueIpsThreshold = 4,
+                BlockMinutes = 240
+            };
+        }
+    }
+
+    public class RecurrenceConfig
+    {
+        [JsonPropertyName("enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [JsonPropertyName("lookbackHours")]
+        public int LookbackHours { get; set; } = 24;
+
+        [JsonPropertyName("stepMultiplier")]
+        public double StepMultiplier { get; set; } = 0.5;
+
+        [JsonPropertyName("maxMultiplier")]
+        public double MaxMultiplier { get; set; } = 4.0;
+
+        public static RecurrenceConfig CreateDefault()
+        {
+            return new RecurrenceConfig
+            {
+                Enabled = true,
+                LookbackHours = 24,
+                StepMultiplier = 0.5,
+                MaxMultiplier = 4.0
+            };
+        }
+    }
+
+    public class SubnetConfig
+    {
+        [JsonPropertyName("enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [JsonPropertyName("windowMinutes")]
+        public int WindowMinutes { get; set; } = 30;
+
+        [JsonPropertyName("uniqueIpsThreshold")]
+        public int UniqueIpsThreshold { get; set; } = 3;
+
+        [JsonPropertyName("blockMinutes")]
+        public int BlockMinutes { get; set; } = 240;
+
+        public static SubnetConfig CreateDefault()
+        {
+            return new SubnetConfig
+            {
+                Enabled = true,
+                WindowMinutes = 30,
+                UniqueIpsThreshold = 3,
+                BlockMinutes = 240
             };
         }
     }

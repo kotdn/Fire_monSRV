@@ -69,6 +69,19 @@ namespace RDPMonitor
             ["LABEL_BLOCK_LEVELS_TABLE"] = new Dictionary<string, string> { ["UA"] = "Рівні блокування (Спроби → Хвилини):", ["EN"] = "Block Levels (Attempts – Minutes):" },
             ["COL_ATTEMPTS"] = new Dictionary<string, string> { ["UA"] = "Спроби", ["EN"] = "Attempts" },
             ["COL_BLOCK_MINUTES"] = new Dictionary<string, string> { ["UA"] = "Хвилини блокування", ["EN"] = "Block Minutes" },
+
+            ["ANTI_BRUTE_SECTION"] = new Dictionary<string, string> { ["UA"] = "Anti-Brute (MVP)", ["EN"] = "Anti-Brute (MVP)" },
+            ["ANTI_BRUTE_ENABLED"] = new Dictionary<string, string> { ["UA"] = "Увімкнути anti-brute", ["EN"] = "Enable anti-brute" },
+            ["ANTI_BRUTE_ENABLED_SHORT"] = new Dictionary<string, string> { ["UA"] = "Увімкнено", ["EN"] = "Enabled" },
+            ["ANTI_BRUTE_SPRAY"] = new Dictionary<string, string> { ["UA"] = "Spray-детект (багато IP на одного юзера)", ["EN"] = "Spray detection (many IPs to one user)" },
+            ["ANTI_BRUTE_RECURRENCE"] = new Dictionary<string, string> { ["UA"] = "Рецидив IP (множник часу бану)", ["EN"] = "IP recurrence (ban multiplier)" },
+            ["ANTI_BRUTE_SUBNET"] = new Dictionary<string, string> { ["UA"] = "Ескалація до /24 підмережі", ["EN"] = "Escalation to /24 subnet" },
+            ["ANTI_BRUTE_WINDOW_MIN"] = new Dictionary<string, string> { ["UA"] = "Вікно (хв):", ["EN"] = "Window (min):" },
+            ["ANTI_BRUTE_UNIQUE_IPS"] = new Dictionary<string, string> { ["UA"] = "Поріг унікальних IP:", ["EN"] = "Unique IP threshold:" },
+            ["ANTI_BRUTE_BLOCK_MIN"] = new Dictionary<string, string> { ["UA"] = "Блок (хв):", ["EN"] = "Block (min):" },
+            ["ANTI_BRUTE_LOOKBACK_H"] = new Dictionary<string, string> { ["UA"] = "Історія (год):", ["EN"] = "Lookback (hours):" },
+            ["ANTI_BRUTE_STEP"] = new Dictionary<string, string> { ["UA"] = "Step multiplier:", ["EN"] = "Step multiplier:" },
+            ["ANTI_BRUTE_MAX"] = new Dictionary<string, string> { ["UA"] = "Max multiplier:", ["EN"] = "Max multiplier:" },
             
             // Telegram notifications
             ["TELEGRAM_SECTION_HEADER"] = new Dictionary<string, string> { ["UA"] = "Налаштування Telegram сповіщень", ["EN"] = "Telegram Notifications Settings" },

@@ -60,6 +60,19 @@ namespace RDPMonitor
         private Button btnSaveConfig;
         private Button btnAddLevel;
         private Button btnRemoveLevel;
+        private CheckBox chkAntiBruteEnabled;
+        private CheckBox chkSprayEnabled;
+        private TextBox txtSprayWindowMinutes;
+        private TextBox txtSprayUniqueIpsThreshold;
+        private TextBox txtSprayBlockMinutes;
+        private CheckBox chkRecurrenceEnabled;
+        private TextBox txtRecurrenceLookbackHours;
+        private TextBox txtRecurrenceStepMultiplier;
+        private TextBox txtRecurrenceMaxMultiplier;
+        private CheckBox chkSubnetEnabled;
+        private TextBox txtSubnetWindowMinutes;
+        private TextBox txtSubnetUniqueIpsThreshold;
+        private TextBox txtSubnetBlockMinutes;
         
         // Tab: Telegram/Alerts
         private CheckBox chkTelegramEnabled;
@@ -684,11 +697,225 @@ namespace RDPMonitor
             btnRemoveLevel.Click += BtnRemoveLevel_Click;
             pnl.Controls.Add(btnRemoveLevel);
 
+            var lblAntiBrute = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_SECTION"),
+                AutoSize = true,
+                Location = new Point(440, 50),
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = Color.FromArgb(0, 102, 204)
+            };
+            pnl.Controls.Add(lblAntiBrute);
+
+            chkAntiBruteEnabled = new CheckBox
+            {
+                Text = Lang.Get("ANTI_BRUTE_ENABLED"),
+                AutoSize = true,
+                Location = new Point(440, 78),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+            };
+            pnl.Controls.Add(chkAntiBruteEnabled);
+
+            var lblSpray = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_SPRAY"),
+                AutoSize = true,
+                Location = new Point(440, 110),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+            };
+            pnl.Controls.Add(lblSpray);
+
+            chkSprayEnabled = new CheckBox
+            {
+                Text = Lang.Get("ANTI_BRUTE_ENABLED_SHORT"),
+                AutoSize = true,
+                Location = new Point(440, 132)
+            };
+            pnl.Controls.Add(chkSprayEnabled);
+
+            var lblSprayWindow = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_WINDOW_MIN"),
+                AutoSize = true,
+                Location = new Point(440, 158)
+            };
+            pnl.Controls.Add(lblSprayWindow);
+
+            txtSprayWindowMinutes = new TextBox
+            {
+                Location = new Point(690, 154),
+                Size = new Size(90, 24),
+                Text = "10"
+            };
+            pnl.Controls.Add(txtSprayWindowMinutes);
+
+            var lblSprayThreshold = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_UNIQUE_IPS"),
+                AutoSize = true,
+                Location = new Point(440, 186)
+            };
+            pnl.Controls.Add(lblSprayThreshold);
+
+            txtSprayUniqueIpsThreshold = new TextBox
+            {
+                Location = new Point(690, 182),
+                Size = new Size(90, 24),
+                Text = "4"
+            };
+            pnl.Controls.Add(txtSprayUniqueIpsThreshold);
+
+            var lblSprayBlock = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_BLOCK_MIN"),
+                AutoSize = true,
+                Location = new Point(440, 214)
+            };
+            pnl.Controls.Add(lblSprayBlock);
+
+            txtSprayBlockMinutes = new TextBox
+            {
+                Location = new Point(690, 210),
+                Size = new Size(90, 24),
+                Text = "240"
+            };
+            pnl.Controls.Add(txtSprayBlockMinutes);
+
+            var lblRecurrence = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_RECURRENCE"),
+                AutoSize = true,
+                Location = new Point(440, 246),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+            };
+            pnl.Controls.Add(lblRecurrence);
+
+            chkRecurrenceEnabled = new CheckBox
+            {
+                Text = Lang.Get("ANTI_BRUTE_ENABLED_SHORT"),
+                AutoSize = true,
+                Location = new Point(440, 268)
+            };
+            pnl.Controls.Add(chkRecurrenceEnabled);
+
+            var lblRecurrenceLookback = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_LOOKBACK_H"),
+                AutoSize = true,
+                Location = new Point(440, 294)
+            };
+            pnl.Controls.Add(lblRecurrenceLookback);
+
+            txtRecurrenceLookbackHours = new TextBox
+            {
+                Location = new Point(690, 290),
+                Size = new Size(90, 24),
+                Text = "24"
+            };
+            pnl.Controls.Add(txtRecurrenceLookbackHours);
+
+            var lblRecurrenceStep = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_STEP"),
+                AutoSize = true,
+                Location = new Point(440, 322)
+            };
+            pnl.Controls.Add(lblRecurrenceStep);
+
+            txtRecurrenceStepMultiplier = new TextBox
+            {
+                Location = new Point(690, 318),
+                Size = new Size(90, 24),
+                Text = "0.5"
+            };
+            pnl.Controls.Add(txtRecurrenceStepMultiplier);
+
+            var lblRecurrenceMax = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_MAX"),
+                AutoSize = true,
+                Location = new Point(440, 350)
+            };
+            pnl.Controls.Add(lblRecurrenceMax);
+
+            txtRecurrenceMaxMultiplier = new TextBox
+            {
+                Location = new Point(690, 346),
+                Size = new Size(90, 24),
+                Text = "4.0"
+            };
+            pnl.Controls.Add(txtRecurrenceMaxMultiplier);
+
+            var lblSubnet = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_SUBNET"),
+                AutoSize = true,
+                Location = new Point(440, 382),
+                Font = new Font("Segoe UI", 9, FontStyle.Bold)
+            };
+            pnl.Controls.Add(lblSubnet);
+
+            chkSubnetEnabled = new CheckBox
+            {
+                Text = Lang.Get("ANTI_BRUTE_ENABLED_SHORT"),
+                AutoSize = true,
+                Location = new Point(440, 404)
+            };
+            pnl.Controls.Add(chkSubnetEnabled);
+
+            var lblSubnetWindow = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_WINDOW_MIN"),
+                AutoSize = true,
+                Location = new Point(440, 430)
+            };
+            pnl.Controls.Add(lblSubnetWindow);
+
+            txtSubnetWindowMinutes = new TextBox
+            {
+                Location = new Point(690, 426),
+                Size = new Size(90, 24),
+                Text = "30"
+            };
+            pnl.Controls.Add(txtSubnetWindowMinutes);
+
+            var lblSubnetThreshold = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_UNIQUE_IPS"),
+                AutoSize = true,
+                Location = new Point(440, 458)
+            };
+            pnl.Controls.Add(lblSubnetThreshold);
+
+            txtSubnetUniqueIpsThreshold = new TextBox
+            {
+                Location = new Point(690, 454),
+                Size = new Size(90, 24),
+                Text = "3"
+            };
+            pnl.Controls.Add(txtSubnetUniqueIpsThreshold);
+
+            var lblSubnetBlock = new Label
+            {
+                Text = Lang.Get("ANTI_BRUTE_BLOCK_MIN"),
+                AutoSize = true,
+                Location = new Point(440, 486)
+            };
+            pnl.Controls.Add(lblSubnetBlock);
+
+            txtSubnetBlockMinutes = new TextBox
+            {
+                Location = new Point(690, 482),
+                Size = new Size(90, 24),
+                Text = "240"
+            };
+            pnl.Controls.Add(txtSubnetBlockMinutes);
+
             btnSaveConfig = new Button
             {
                 Text = "💾 " + Lang.Get("BTN_SAVE_CONFIGURATION"),
-                Location = new Point(10, 395),
-                Size = new Size(400, 40),
+                Location = new Point(10, 540),
+                Size = new Size(900, 42),
                 BackColor = Color.FromArgb(33, 150, 243),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
@@ -1585,6 +1812,15 @@ namespace RDPMonitor
             btnUnblockIP.Text = Lang.Get("BTN_UNBLOCK_IP");
             btnAddWhiteIP.Text = Lang.Get("BTN_ADD_WITH_PLUS");
             btnRemoveWhiteIP.Text = Lang.Get("BTN_REMOVE_WITH_X");
+
+            if (chkAntiBruteEnabled != null)
+                chkAntiBruteEnabled.Text = Lang.Get("ANTI_BRUTE_ENABLED");
+            if (chkSprayEnabled != null)
+                chkSprayEnabled.Text = Lang.Get("ANTI_BRUTE_ENABLED_SHORT");
+            if (chkRecurrenceEnabled != null)
+                chkRecurrenceEnabled.Text = Lang.Get("ANTI_BRUTE_ENABLED_SHORT");
+            if (chkSubnetEnabled != null)
+                chkSubnetEnabled.Text = Lang.Get("ANTI_BRUTE_ENABLED_SHORT");
             
             // DataGridView columns
             dgvBlockLevels.Columns[0].HeaderText = Lang.Get("GRID_ATTEMPTS");
@@ -1864,7 +2100,7 @@ namespace RDPMonitor
 
                 if (config != null)
                 {
-                    txtPort.Text = config.Port.ToString();
+                    txtPort.Text = (config.Port > 0 ? config.Port : 3389).ToString();
                     
                     dgvBlockLevels.Rows.Clear();
                     if (config.Levels != null)
@@ -1874,6 +2110,29 @@ namespace RDPMonitor
                             dgvBlockLevels.Rows.Add(level.Attempts, level.BlockMinutes);
                         }
                     }
+
+                    var anti = config.AntiBrute ?? AntiBruteConfig.CreateDefault();
+                    var spray = anti.Spray ?? SprayConfig.CreateDefault();
+                    var recurrence = anti.Recurrence ?? RecurrenceConfig.CreateDefault();
+                    var subnet = anti.Subnet ?? SubnetConfig.CreateDefault();
+
+                    chkAntiBruteEnabled.Checked = anti.Enabled;
+
+                    chkSprayEnabled.Checked = spray.Enabled;
+                    txtSprayWindowMinutes.Text = Math.Max(1, spray.WindowMinutes).ToString();
+                    txtSprayUniqueIpsThreshold.Text = Math.Max(2, spray.UniqueIpsThreshold).ToString();
+                    txtSprayBlockMinutes.Text = Math.Max(1, spray.BlockMinutes).ToString();
+
+                    chkRecurrenceEnabled.Checked = recurrence.Enabled;
+                    txtRecurrenceLookbackHours.Text = Math.Max(1, recurrence.LookbackHours).ToString();
+                    txtRecurrenceStepMultiplier.Text = Math.Max(0.0, recurrence.StepMultiplier).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+                    txtRecurrenceMaxMultiplier.Text = Math.Max(1.0, recurrence.MaxMultiplier).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+
+                    chkSubnetEnabled.Checked = subnet.Enabled;
+                    txtSubnetWindowMinutes.Text = Math.Max(1, subnet.WindowMinutes).ToString();
+                    txtSubnetUniqueIpsThreshold.Text = Math.Max(2, subnet.UniqueIpsThreshold).ToString();
+                    txtSubnetBlockMinutes.Text = Math.Max(1, subnet.BlockMinutes).ToString();
+
                     AppendLog("[MONITOR] Config loaded to Settings");
                 }
                 else
@@ -1903,6 +2162,35 @@ namespace RDPMonitor
             {
                 MessageBox.Show("Select a level to remove", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
+        }
+
+        private bool TryParseIntBox(TextBox textBox, string fieldName, int minValue, out int value)
+        {
+            value = 0;
+            if (!int.TryParse(textBox.Text.Trim(), out int parsed) || parsed < minValue)
+            {
+                MessageBox.Show($"Invalid value for {fieldName}. Minimum: {minValue}", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                textBox.Focus();
+                return false;
+            }
+
+            value = parsed;
+            return true;
+        }
+
+        private bool TryParseDoubleBox(TextBox textBox, string fieldName, double minValue, out double value)
+        {
+            value = 0;
+            string raw = (textBox.Text ?? string.Empty).Trim().Replace(',', '.');
+            if (!double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double parsed) || parsed < minValue)
+            {
+                MessageBox.Show($"Invalid value for {fieldName}. Minimum: {minValue}", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                textBox.Focus();
+                return false;
+            }
+
+            value = parsed;
+            return true;
         }
 
         private void BtnSaveConfig_Click(object sender, EventArgs e)
@@ -1936,7 +2224,59 @@ namespace RDPMonitor
                     return;
                 }
 
-                var config = new ServiceConfig { Port = port, Levels = levels };
+                if (!TryParseIntBox(txtSprayWindowMinutes, "Spray windowMinutes", 1, out int sprayWindowMinutes)) return;
+                if (!TryParseIntBox(txtSprayUniqueIpsThreshold, "Spray uniqueIpsThreshold", 2, out int sprayUniqueIpsThreshold)) return;
+                if (!TryParseIntBox(txtSprayBlockMinutes, "Spray blockMinutes", 1, out int sprayBlockMinutes)) return;
+
+                if (!TryParseIntBox(txtRecurrenceLookbackHours, "Recurrence lookbackHours", 1, out int recurrenceLookbackHours)) return;
+                if (!TryParseDoubleBox(txtRecurrenceStepMultiplier, "Recurrence stepMultiplier", 0.0, out double recurrenceStepMultiplier)) return;
+                if (!TryParseDoubleBox(txtRecurrenceMaxMultiplier, "Recurrence maxMultiplier", 1.0, out double recurrenceMaxMultiplier)) return;
+
+                if (!TryParseIntBox(txtSubnetWindowMinutes, "Subnet windowMinutes", 1, out int subnetWindowMinutes)) return;
+                if (!TryParseIntBox(txtSubnetUniqueIpsThreshold, "Subnet uniqueIpsThreshold", 2, out int subnetUniqueIpsThreshold)) return;
+                if (!TryParseIntBox(txtSubnetBlockMinutes, "Subnet blockMinutes", 1, out int subnetBlockMinutes)) return;
+
+                string configPath = Path.Combine(LOG_DIR, "config.json");
+                ServiceConfig? config;
+                if (File.Exists(configPath))
+                {
+                    var currentJson = File.ReadAllText(configPath, Encoding.UTF8);
+                    var currentOptions = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    config = JsonSerializer.Deserialize<ServiceConfig>(currentJson, currentOptions) ?? new ServiceConfig();
+                }
+                else
+                {
+                    config = new ServiceConfig();
+                }
+
+                config.Port = port;
+                config.Levels = levels;
+                config.AntiBrute = new AntiBruteConfig
+                {
+                    Enabled = chkAntiBruteEnabled.Checked,
+                    Spray = new SprayConfig
+                    {
+                        Enabled = chkSprayEnabled.Checked,
+                        WindowMinutes = sprayWindowMinutes,
+                        UniqueIpsThreshold = sprayUniqueIpsThreshold,
+                        BlockMinutes = sprayBlockMinutes
+                    },
+                    Recurrence = new RecurrenceConfig
+                    {
+                        Enabled = chkRecurrenceEnabled.Checked,
+                        LookbackHours = recurrenceLookbackHours,
+                        StepMultiplier = recurrenceStepMultiplier,
+                        MaxMultiplier = recurrenceMaxMultiplier
+                    },
+                    Subnet = new SubnetConfig
+                    {
+                        Enabled = chkSubnetEnabled.Checked,
+                        WindowMinutes = subnetWindowMinutes,
+                        UniqueIpsThreshold = subnetUniqueIpsThreshold,
+                        BlockMinutes = subnetBlockMinutes
+                    }
+                };
+
                 var options = new JsonSerializerOptions 
                 { 
                     WriteIndented = true,
@@ -1944,7 +2284,6 @@ namespace RDPMonitor
                 };
                 var json = JsonSerializer.Serialize(config, options);
 
-                string configPath = Path.Combine(LOG_DIR, "config.json");
                 File.WriteAllText(configPath, json, Encoding.UTF8);
 
                 LoadConfiguration();
@@ -1979,6 +2318,113 @@ namespace RDPMonitor
         
         [System.Text.Json.Serialization.JsonPropertyName("telegram")]
         public TelegramConfig? Telegram { get; set; }
+
+        [System.Text.Json.Serialization.JsonPropertyName("antiBrute")]
+        public AntiBruteConfig? AntiBrute { get; set; }
+    }
+
+    public class AntiBruteConfig
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [System.Text.Json.Serialization.JsonPropertyName("spray")]
+        public SprayConfig? Spray { get; set; } = SprayConfig.CreateDefault();
+
+        [System.Text.Json.Serialization.JsonPropertyName("recurrence")]
+        public RecurrenceConfig? Recurrence { get; set; } = RecurrenceConfig.CreateDefault();
+
+        [System.Text.Json.Serialization.JsonPropertyName("subnet")]
+        public SubnetConfig? Subnet { get; set; } = SubnetConfig.CreateDefault();
+
+        public static AntiBruteConfig CreateDefault()
+        {
+            return new AntiBruteConfig
+            {
+                Enabled = true,
+                Spray = SprayConfig.CreateDefault(),
+                Recurrence = RecurrenceConfig.CreateDefault(),
+                Subnet = SubnetConfig.CreateDefault()
+            };
+        }
+    }
+
+    public class SprayConfig
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [System.Text.Json.Serialization.JsonPropertyName("windowMinutes")]
+        public int WindowMinutes { get; set; } = 10;
+
+        [System.Text.Json.Serialization.JsonPropertyName("uniqueIpsThreshold")]
+        public int UniqueIpsThreshold { get; set; } = 4;
+
+        [System.Text.Json.Serialization.JsonPropertyName("blockMinutes")]
+        public int BlockMinutes { get; set; } = 240;
+
+        public static SprayConfig CreateDefault()
+        {
+            return new SprayConfig
+            {
+                Enabled = true,
+                WindowMinutes = 10,
+                UniqueIpsThreshold = 4,
+                BlockMinutes = 240
+            };
+        }
+    }
+
+    public class RecurrenceConfig
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [System.Text.Json.Serialization.JsonPropertyName("lookbackHours")]
+        public int LookbackHours { get; set; } = 24;
+
+        [System.Text.Json.Serialization.JsonPropertyName("stepMultiplier")]
+        public double StepMultiplier { get; set; } = 0.5;
+
+        [System.Text.Json.Serialization.JsonPropertyName("maxMultiplier")]
+        public double MaxMultiplier { get; set; } = 4.0;
+
+        public static RecurrenceConfig CreateDefault()
+        {
+            return new RecurrenceConfig
+            {
+                Enabled = true,
+                LookbackHours = 24,
+                StepMultiplier = 0.5,
+                MaxMultiplier = 4.0
+            };
+        }
+    }
+
+    public class SubnetConfig
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("enabled")]
+        public bool Enabled { get; set; } = true;
+
+        [System.Text.Json.Serialization.JsonPropertyName("windowMinutes")]
+        public int WindowMinutes { get; set; } = 30;
+
+        [System.Text.Json.Serialization.JsonPropertyName("uniqueIpsThreshold")]
+        public int UniqueIpsThreshold { get; set; } = 3;
+
+        [System.Text.Json.Serialization.JsonPropertyName("blockMinutes")]
+        public int BlockMinutes { get; set; } = 240;
+
+        public static SubnetConfig CreateDefault()
+        {
+            return new SubnetConfig
+            {
+                Enabled = true,
+                WindowMinutes = 30,
+                UniqueIpsThreshold = 3,
+                BlockMinutes = 240
+            };
+        }
     }
 
     public class TelegramConfig
