@@ -238,7 +238,7 @@ class Program
             isRunning = false;
             
             // Send stop notification to Telegram
-            SendServiceNotification("⛔ УПАЛ");
+            SendServiceNotification("🛑 СЛУЖБА ЗУПИНЕНА");
             // try { gateListener?.Stop(); } catch { }
 
             if (monitorThread != null)
@@ -656,6 +656,12 @@ class Program
 
         private void ApplyIpBan(string ipAddress, DateTime eventTimeLocal, int attemptCount, int requestedBlockMinutes, int appliedAttempts, string reason)
         {
+            if (IsLocalOrPrivateIp(ipAddress))
+            {
+                WriteLog($"Skipped ban for protected local/private IP: {ipAddress}");
+                return;
+            }
+
             DateTime nowLocal = DateTime.Now;
             int effectiveBlockMinutes = GetEffectiveBlockMinutes(ipAddress, requestedBlockMinutes, nowLocal);
             DateTime until = nowLocal.AddMinutes(Math.Max(1, effectiveBlockMinutes));
@@ -907,6 +913,9 @@ class Program
         {
             try
             {
+                if (IsLocalOrPrivateIp(ipAddress))
+                    return true;
+
                 return LoadWhitelistSet().Contains(ipAddress);
             }
             catch (Exception ex)
@@ -914,6 +923,65 @@ class Program
                 WriteLog($"Error checking whitelist: {ex.Message}");
                 return false;
             }
+        }
+
+        private bool IsLocalOrPrivateIp(string ipAddress)
+        {
+            if (!IPAddress.TryParse(ipAddress, out IPAddress parsedIp))
+                return false;
+
+            var ip = parsedIp.IsIPv4MappedToIPv6 ? parsedIp.MapToIPv4() : parsedIp;
+            if (IPAddress.IsLoopback(ip))
+                return true;
+
+            if (ip.AddressFamily == AddressFamily.InterNetwork)
+            {
+                byte[] bytes = ip.GetAddressBytes();
+                if (bytes.Length != 4)
+                    return false;
+
+                return bytes[0] == 10
+                    || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+                    || (bytes[0] == 192 && bytes[1] == 168)
+                    || (bytes[0] == 169 && bytes[1] == 254);
+            }
+
+            if (ip.AddressFamily == AddressFamily.InterNetworkV6)
+            {
+                if (ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal)
+                    return true;
+
+                byte[] bytes = ip.GetAddressBytes();
+                return bytes.Length > 0 && (bytes[0] & 0xFE) == 0xFC;
+            }
+
+            return false;
+        }
+
+        private HashSet<string> GetLocalAutoWhitelistIps()
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "127.0.0.1"
+            };
+
+            try
+            {
+                foreach (var ip in Dns.GetHostAddresses(Dns.GetHostName()))
+                {
+                    if (ip.AddressFamily != AddressFamily.InterNetwork)
+                        continue;
+
+                    string text = ip.ToString();
+                    if (IsLocalOrPrivateIp(text))
+                        set.Add(text);
+                }
+            }
+            catch
+            {
+            }
+
+            return set;
         }
 
         private void BlockIP(string ipAddress)
@@ -1082,7 +1150,7 @@ class Program
                             string target = ExtractBlockedTargetFromLine(line);
                             if (!string.IsNullOrWhiteSpace(target) &&
                                 !target.Contains("/", StringComparison.Ordinal) &&
-                                whitelist.Contains(target))
+                                (whitelist.Contains(target) || IsLocalOrPrivateIp(target)))
                             {
                                 blockListPruned = true;
                                 continue; // whitelist has priority; remove from block list file
@@ -1343,25 +1411,28 @@ class Program
         private HashSet<string> LoadWhitelistSet()
         {
             var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (!File.Exists(whitelistPath))
-                return set;
-
-            lock (logLock)
+            if (File.Exists(whitelistPath))
             {
-                foreach (string raw in File.ReadAllLines(whitelistPath))
+                lock (logLock)
                 {
-                    if (string.IsNullOrWhiteSpace(raw))
-                        continue;
+                    foreach (string raw in File.ReadAllLines(whitelistPath))
+                    {
+                        if (string.IsNullOrWhiteSpace(raw))
+                            continue;
 
-                    string line = raw.Trim();
-                    int i = line.IndexOf("IP:", StringComparison.OrdinalIgnoreCase);
-                    if (i >= 0)
-                        line = line.Substring(i + 3).Trim();
+                        string line = raw.Trim();
+                        int i = line.IndexOf("IP:", StringComparison.OrdinalIgnoreCase);
+                        if (i >= 0)
+                            line = line.Substring(i + 3).Trim();
 
-                    if (System.Net.IPAddress.TryParse(line, out _))
-                        set.Add(line);
+                        if (System.Net.IPAddress.TryParse(line, out _))
+                            set.Add(line);
+                    }
                 }
             }
+
+            foreach (var ip in GetLocalAutoWhitelistIps())
+                set.Add(ip);
 
             return set;
         }

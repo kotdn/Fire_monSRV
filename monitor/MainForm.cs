@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
@@ -24,12 +25,20 @@ namespace RDPMonitor
         private const string LOCAL_SERVICE_EXE = @"C:\Users\samoilenkod\source\repos\Winservice\artifacts\final\winservice\WinService.exe";
         
         // Top panels
+        private Panel pnlTopContainer;
+        private Panel pnlServiceStatusContainer;
+        private Panel pnlConfigurationContainer;
+        private Label lblServiceStatusHeader;
+        private Label lblConfigurationHeader;
         private Label lblServiceStatus;
         private Label lblConfig;
         private Button btnRefresh;
         private Button btnStartService;
         private Button btnStopService;
-        private ComboBox cmbLanguage;
+        private MenuStrip mainMenu;
+        private ToolStripMenuItem menuLanguage;
+        private ToolStripMenuItem menuLanguageUa;
+        private ToolStripMenuItem menuLanguageEn;
         
         // TabControl
         private TabControl tabControl;
@@ -83,31 +92,35 @@ namespace RDPMonitor
         private Label lblTelegramStatus;
         private Dictionary<string, TextBox> txtMessageTemplates = new Dictionary<string, TextBox>();
         
+        // Tab: Message Settings
+        private CheckBox chkNotifyMonitorStart;
+        private CheckBox chkNotifyMonitorClose;
+        private CheckBox chkNotifyServiceStart;
+        private CheckBox chkNotifyServiceStop;
+        private CheckBox chkNotifyConfigSave;
+        private Button btnSaveMessageSettings;
+        
         // Timers and watchers
         private System.Windows.Forms.Timer refreshTimer;
         private FileSystemWatcher fileWatcher;
         private long lastAccessLogPosition = 0;
         private long lastBlockLogPosition = 0;
         private long lastServiceLogPosition = 0;
-        private bool startupTelegramSent = false;
+        private readonly Dictionary<string, DateTime> recentFileLogEntries = new Dictionary<string, DateTime>();
+        private static readonly TimeSpan DuplicateLogWindow = TimeSpan.FromSeconds(20);
+        private bool suppressIpMaskUpdate = false;
 
         public MainForm()
         {
             InitializeComponents();
-            SetupFileWatcher();
             LoadInitialData();
+            SetupFileWatcher();
             StartAutoRefresh();
         }
 
         protected override void OnShown(EventArgs e)
         {
             base.OnShown(e);
-
-            if (startupTelegramSent)
-                return;
-
-            startupTelegramSent = true;
-            SendSimpleTelegramMessage("🚀 СТАРТАНУЛ");
         }
 
         private void InitializeComponents()
@@ -126,36 +139,58 @@ namespace RDPMonitor
                 this.Icon = appIcon;
             }
 
-            // ===== TOP STATUS PANEL =====
-            var pnlTop = new Panel
+            mainMenu = new MenuStrip
             {
-                Location = new Point(10, 10),
+                Dock = DockStyle.Top,
+                Font = new Font("Segoe UI", 9),
+                ImageScalingSize = new Size(24, 16)
+            };
+
+            var uaFlag = CreateLanguageFlagImage("UA");
+            var enFlag = CreateLanguageFlagImage("EN");
+
+            menuLanguage = new ToolStripMenuItem("Мова");
+            menuLanguageUa = new ToolStripMenuItem("UA") { Image = uaFlag };
+            menuLanguageEn = new ToolStripMenuItem("EN") { Image = enFlag };
+            menuLanguageUa.Click += (s, e) => SetLanguage("UA");
+            menuLanguageEn.Click += (s, e) => SetLanguage("EN");
+            menuLanguage.DropDownItems.Add(menuLanguageUa);
+            menuLanguage.DropDownItems.Add(menuLanguageEn);
+            mainMenu.Items.Add(menuLanguage);
+
+            this.Controls.Add(mainMenu);
+            SyncLanguageMenuChecks();
+
+            // ===== TOP STATUS PANEL =====
+            pnlTopContainer = new Panel
+            {
+                Location = new Point(10, 34),
                 Size = new Size(980, 120),
                 BackColor = Color.White,
                 BorderStyle = BorderStyle.None
             };
 
             // Left panel - Service Status
-            var pnlServiceStatus = new Panel
+            pnlServiceStatusContainer = new Panel
             {
                 Location = new Point(0, 0),
                 Size = new Size(500, 120),
                 BackColor = Color.White,
                 BorderStyle = BorderStyle.FixedSingle
             };
-            pnlTop.Controls.Add(pnlServiceStatus);
+            pnlTopContainer.Controls.Add(pnlServiceStatusContainer);
 
             // Right panel - Configuration
-            var pnlConfig = new Panel
+            pnlConfigurationContainer = new Panel
             {
                 Location = new Point(515, 0),
                 Size = new Size(465, 120),
                 BackColor = Color.White,
                 BorderStyle = BorderStyle.FixedSingle
             };
-            pnlTop.Controls.Add(pnlConfig);
+            pnlTopContainer.Controls.Add(pnlConfigurationContainer);
 
-            var lblStatusHeader = new Label
+            lblServiceStatusHeader = new Label
             {
                 Text = Lang.Get("SERVICE_STATUS_HEADER"),
                 Location = new Point(10, 10),
@@ -163,7 +198,7 @@ namespace RDPMonitor
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 ForeColor = Color.FromArgb(0, 102, 204)
             };
-            pnlServiceStatus.Controls.Add(lblStatusHeader);
+            pnlServiceStatusContainer.Controls.Add(lblServiceStatusHeader);
 
             lblServiceStatus = new Label
             {
@@ -173,7 +208,7 @@ namespace RDPMonitor
                 Text = Lang.Get("SERVICE_CHECKING"),
                 ForeColor = Color.FromArgb(100, 100, 100)
             };
-            pnlServiceStatus.Controls.Add(lblServiceStatus);
+            pnlServiceStatusContainer.Controls.Add(lblServiceStatus);
 
             btnStartService = new Button
             {
@@ -187,7 +222,7 @@ namespace RDPMonitor
             };
             btnStartService.FlatAppearance.BorderSize = 0;
             btnStartService.Click += BtnStartService_Click;
-            pnlServiceStatus.Controls.Add(btnStartService);
+            pnlServiceStatusContainer.Controls.Add(btnStartService);
 
             btnStopService = new Button
             {
@@ -201,7 +236,7 @@ namespace RDPMonitor
             };
             btnStopService.FlatAppearance.BorderSize = 0;
             btnStopService.Click += BtnStopService_Click;
-            pnlServiceStatus.Controls.Add(btnStopService);
+            pnlServiceStatusContainer.Controls.Add(btnStopService);
 
             btnRefresh = new Button
             {
@@ -215,10 +250,10 @@ namespace RDPMonitor
             };
             btnRefresh.FlatAppearance.BorderSize = 0;
             btnRefresh.Click += BtnRefresh_Click;
-            pnlServiceStatus.Controls.Add(btnRefresh);
+            pnlServiceStatusContainer.Controls.Add(btnRefresh);
 
             // Config on right side of top panel
-            var lblConfigHeader = new Label
+            lblConfigurationHeader = new Label
             {
                 Text = Lang.Get("CONFIG_HEADER"),
                 Location = new Point(10, 10),
@@ -226,22 +261,7 @@ namespace RDPMonitor
                 Font = new Font("Segoe UI", 10, FontStyle.Bold),
                 ForeColor = Color.FromArgb(0, 102, 204)
             };
-            pnlConfig.Controls.Add(lblConfigHeader);
-
-            // Language selector
-            cmbLanguage = new ComboBox
-            {
-                Location = new Point(340, 8),
-                Size = new Size(110, 25),
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                Font = new Font("Segoe UI", 9, FontStyle.Bold),
-                ForeColor = Color.FromArgb(0, 102, 204),
-                BackColor = Color.White
-            };
-            cmbLanguage.Items.AddRange(new object[] { "🇺🇦 UA", "🇬🇧 EN" });
-            cmbLanguage.SelectedIndex = Program.CurrentLanguage == "UA" ? 0 : 1;
-            cmbLanguage.SelectedIndexChanged += CmbLanguage_SelectedIndexChanged;
-            pnlConfig.Controls.Add(cmbLanguage);
+            pnlConfigurationContainer.Controls.Add(lblConfigurationHeader);
 
             lblConfig = new Label
             {
@@ -252,14 +272,14 @@ namespace RDPMonitor
                 AutoSize = false,
                 BackColor = Color.FromArgb(250, 250, 250)
             };
-            pnlConfig.Controls.Add(lblConfig);
+            pnlConfigurationContainer.Controls.Add(lblConfig);
 
-            this.Controls.Add(pnlTop);
+            this.Controls.Add(pnlTopContainer);
 
             // ===== TAB CONTROL =====
             tabControl = new TabControl
             {
-                Location = new Point(10, 140),
+                Location = new Point(10, 164),
                 Size = new Size(980, 560),
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
                 Font = new Font("Segoe UI", 9)
@@ -295,7 +315,56 @@ namespace RDPMonitor
             CreateAlertsTab(tabAlerts);
             tabControl.TabPages.Add(tabAlerts);
 
+            // Tab 7: Message Settings
+            var tabMessageSettings = new TabPage(Lang.Get("TAB_MESSAGE_SETTINGS"));
+            CreateMessageSettingsTab(tabMessageSettings);
+            tabControl.TabPages.Add(tabMessageSettings);
+
             this.Controls.Add(tabControl);
+
+            this.Resize += (s, e) => ApplyMainLayout();
+            ApplyMainLayout();
+
+            // ===== BACKGROUND SHIELD IMAGE (ADD LAST SO IT STAYS BEHIND) =====
+            AddBackgroundShield();
+        }
+
+        private void ApplyMainLayout()
+        {
+            if (mainMenu == null || pnlTopContainer == null || pnlServiceStatusContainer == null || pnlConfigurationContainer == null || tabControl == null)
+                return;
+
+            int margin = 10;
+            int topY = mainMenu.Bottom + 6;
+            int topHeight = 120;
+            int totalWidth = Math.Max(500, this.ClientSize.Width - margin * 2);
+            int gap = 15;
+
+            pnlTopContainer.Location = new Point(margin, topY);
+            pnlTopContainer.Size = new Size(totalWidth, topHeight);
+
+            int leftWidth = (totalWidth - gap) / 2;
+            int rightWidth = totalWidth - gap - leftWidth;
+
+            pnlServiceStatusContainer.Location = new Point(0, 0);
+            pnlServiceStatusContainer.Size = new Size(leftWidth, topHeight);
+
+            pnlConfigurationContainer.Location = new Point(leftWidth + gap, 0);
+            pnlConfigurationContainer.Size = new Size(rightWidth, topHeight);
+
+            if (lblServiceStatusHeader != null)
+                lblServiceStatusHeader.Size = new Size(Math.Max(120, leftWidth - 20), 20);
+            if (lblServiceStatus != null)
+                lblServiceStatus.Size = new Size(Math.Max(120, leftWidth - 20), 25);
+            if (lblConfigurationHeader != null)
+                lblConfigurationHeader.Size = new Size(Math.Max(120, rightWidth - 20), 20);
+            if (lblConfig != null)
+                lblConfig.Size = new Size(Math.Max(120, rightWidth - 20), 75);
+
+            int tabY = pnlTopContainer.Bottom + 10;
+            int tabHeight = Math.Max(200, this.ClientSize.Height - tabY - margin);
+            tabControl.Location = new Point(margin, tabY);
+            tabControl.Size = new Size(totalWidth, tabHeight);
         }
 
         private Icon? LoadApplicationIcon()
@@ -361,6 +430,48 @@ namespace RDPMonitor
             }
         }
 
+        private void AddBackgroundShield()
+        {
+            try
+            {
+                var resourcePath = Path.Combine(AppContext.BaseDirectory, "Resources", "shield_bg.png");
+                if (!File.Exists(resourcePath))
+                    return;
+
+                var backgroundImage = Image.FromFile(resourcePath);
+                
+                // Calculate centered position and scaled size
+                int imageSize = 400; // Max size for the shield
+                int x = (this.ClientSize.Width - imageSize) / 2;
+                int y = (this.ClientSize.Height - imageSize) / 2 + 50; // Offset down slightly
+
+                var picShield = new TransparentPictureBox
+                {
+                    Image = backgroundImage,
+                    Location = new Point(x, y),
+                    Size = new Size(imageSize, imageSize),
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    BackColor = Color.Transparent
+                };
+
+                // Add as first control (behind everything)
+                this.Controls.Add(picShield);
+                picShield.SendToBack();
+
+                // Reposition on resize
+                this.Resize += (s, e) =>
+                {
+                    int newX = (this.ClientSize.Width - imageSize) / 2;
+                    int newY = (this.ClientSize.Height - imageSize) / 2 + 50;
+                    picShield.Location = new Point(newX, newY);
+                };
+            }
+            catch
+            {
+                // Silently fail if image not found
+            }
+        }
+
         private void CreateCurrentLogsTab(TabPage tab)
         {
             txtLogs = new TextBox
@@ -380,6 +491,8 @@ namespace RDPMonitor
         private void CreateBannedIPsTab(TabPage tab)
         {
             var pnl = new Panel { Dock = DockStyle.Fill, Padding = new Padding(20, 20, 20, 50), AutoScroll = true };
+            pnl.HorizontalScroll.Enabled = false;
+            pnl.HorizontalScroll.Visible = false;
 
             var lbl = new Label
             {
@@ -418,6 +531,7 @@ namespace RDPMonitor
                 Font = new Font("Segoe UI", 9),
                 Padding = new Padding(5)
             };
+            AttachIpInputMask(txtIPToUnblock);
             pnl.Controls.Add(txtIPToUnblock);
 
             btnUnblockIP = new Button
@@ -440,6 +554,8 @@ namespace RDPMonitor
         private void CreateWhiteListTab(TabPage tab)
         {
             var pnl = new Panel { Dock = DockStyle.Fill, Padding = new Padding(20, 20, 20, 50), AutoScroll = true };
+            pnl.HorizontalScroll.Enabled = false;
+            pnl.HorizontalScroll.Visible = false;
 
             var lbl = new Label
             {
@@ -494,6 +610,7 @@ namespace RDPMonitor
                 Font = new Font("Segoe UI", 9),
                 PlaceholderText = "192.168.1.100"
             };
+            AttachIpInputMask(txtNewWhiteIP);
             pnl.Controls.Add(txtNewWhiteIP);
 
             btnAddWhiteIP = new Button
@@ -530,6 +647,8 @@ namespace RDPMonitor
         private void CreateManualBlockTab(TabPage tab)
         {
             var pnl = new Panel { Dock = DockStyle.Fill, Padding = new Padding(20, 20, 20, 50), AutoScroll = true };
+            pnl.HorizontalScroll.Enabled = false;
+            pnl.HorizontalScroll.Visible = false;
 
             var lblTitle = new Label
             {
@@ -557,6 +676,7 @@ namespace RDPMonitor
                 Font = new Font("Segoe UI", 10),
                 PlaceholderText = "192.168.1.50"
             };
+            AttachIpInputMask(txtIPToBlock);
             pnl.Controls.Add(txtIPToBlock);
 
             var lblMinutes = new Label
@@ -574,7 +694,7 @@ namespace RDPMonitor
                 Size = new Size(300, 28),
                 Font = new Font("Segoe UI", 10),
                 Text = "60",
-                PlaceholderText = "60"
+                PlaceholderText = "60 / 12h / 7d / 2w"
             };
             pnl.Controls.Add(txtBlockMinutes);
 
@@ -607,9 +727,93 @@ namespace RDPMonitor
             tab.Controls.Add(pnl);
         }
 
+        private void AttachIpInputMask(TextBox textBox)
+        {
+            textBox.KeyPress += IpTextBox_KeyPress;
+            textBox.TextChanged += IpTextBox_TextChanged;
+        }
+
+        private void IpTextBox_KeyPress(object sender, KeyPressEventArgs e)
+        {
+            if (char.IsControl(e.KeyChar))
+                return;
+
+            if (char.IsDigit(e.KeyChar) || e.KeyChar == '.')
+                return;
+
+            e.Handled = true;
+        }
+
+        private void IpTextBox_TextChanged(object sender, EventArgs e)
+        {
+            if (suppressIpMaskUpdate || sender is not TextBox textBox)
+                return;
+
+            string original = textBox.Text;
+            string normalized = NormalizePartialIpv4(original);
+            if (normalized == original)
+                return;
+
+            int caret = textBox.SelectionStart;
+            string leftPart = NormalizePartialIpv4(original.Substring(0, Math.Min(caret, original.Length)));
+
+            suppressIpMaskUpdate = true;
+            textBox.Text = normalized;
+            textBox.SelectionStart = Math.Min(leftPart.Length, textBox.Text.Length);
+            suppressIpMaskUpdate = false;
+        }
+
+        private string NormalizePartialIpv4(string input)
+        {
+            if (string.IsNullOrEmpty(input))
+                return string.Empty;
+
+            var output = new StringBuilder(input.Length);
+            int dots = 0;
+            int octetDigits = 0;
+            int octetValue = 0;
+            bool hasDigitInCurrentOctet = false;
+
+            foreach (char ch in input)
+            {
+                if (char.IsDigit(ch))
+                {
+                    if (dots > 3 || octetDigits >= 3)
+                        continue;
+
+                    int digit = ch - '0';
+                    int candidate = octetDigits == 0 ? digit : (octetValue * 10) + digit;
+                    if (candidate > 255)
+                        continue;
+
+                    output.Append(ch);
+                    octetValue = candidate;
+                    octetDigits++;
+                    hasDigitInCurrentOctet = true;
+                    continue;
+                }
+
+                if (ch == '.')
+                {
+                    if (!hasDigitInCurrentOctet || dots >= 3)
+                        continue;
+
+                    output.Append(ch);
+                    dots++;
+                    octetDigits = 0;
+                    octetValue = 0;
+                    hasDigitInCurrentOctet = false;
+                }
+            }
+
+            return output.ToString();
+        }
+
         private void CreateSettingsTab(TabPage tab)
         {
             var pnl = new Panel { Dock = DockStyle.Fill, Padding = new Padding(20, 20, 20, 50), AutoScroll = true };
+            pnl.HorizontalScroll.Enabled = false;
+            pnl.HorizontalScroll.Visible = false;
 
             var lblTitle = new Label
             {
@@ -643,7 +847,7 @@ namespace RDPMonitor
             // Block Levels
             var lblLevels = new Label
             {
-                Text = Lang.Get("LABEL_BLOCK_LEVELS_TABLE"),
+                Text = Lang.Get("LABEL_BLOCK_LEVELS_TABLE") + " (60 / 12h / 7d / 2w)",
                 AutoSize = true,
                 Location = new Point(10, 120),
                 Font = new Font("Segoe UI", 9, FontStyle.Bold)
@@ -940,6 +1144,8 @@ namespace RDPMonitor
                 Padding = new Padding(20, 20, 20, 50),
                 AutoScroll = true
             };
+            pnl.HorizontalScroll.Enabled = false;
+            pnl.HorizontalScroll.Visible = false;
 
             int yPos = 10;
 
@@ -1413,6 +1619,223 @@ namespace RDPMonitor
             }
         }
 
+        private void CreateMessageSettingsTab(TabPage tab)
+        {
+            var pnl = new Panel
+            {
+                Dock = DockStyle.Fill,
+                BackColor = Color.FromArgb(245, 245, 245),
+                Padding = new Padding(20, 20, 20, 50),
+                AutoScroll = true
+            };
+            pnl.HorizontalScroll.Enabled = false;
+            pnl.HorizontalScroll.Visible = false;
+
+            int yPos = 10;
+
+            // Section header
+            var lblHeader = new Label
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(900, 30),
+                Text = Lang.Get("MSG_SETTINGS_HEADER"),
+                Font = new Font("Segoe UI", 12, FontStyle.Bold),
+                ForeColor = Color.FromArgb(0, 102, 204)
+            };
+            pnl.Controls.Add(lblHeader);
+            yPos += 45;
+
+            // Monitor section
+            var lblMonitor = new Label
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(300, 25),
+                Text = Lang.Get("MSG_SETTINGS_MONITOR"),
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = Color.FromArgb(50, 50, 50)
+            };
+            pnl.Controls.Add(lblMonitor);
+            yPos += 30;
+
+            chkNotifyMonitorStart = new CheckBox
+            {
+                Location = new Point(30, yPos),
+                Size = new Size(500, 25),
+                Text = Lang.Get("MSG_SETTINGS_MONITOR_START"),
+                Font = new Font("Segoe UI", 9),
+                Checked = false
+            };
+            pnl.Controls.Add(chkNotifyMonitorStart);
+            yPos += 30;
+
+            chkNotifyMonitorClose = new CheckBox
+            {
+                Location = new Point(30, yPos),
+                Size = new Size(500, 25),
+                Text = Lang.Get("MSG_SETTINGS_MONITOR_CLOSE"),
+                Font = new Font("Segoe UI", 9),
+                Checked = false
+            };
+            pnl.Controls.Add(chkNotifyMonitorClose);
+            yPos += 45;
+
+            // Service section
+            var lblService = new Label
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(300, 25),
+                Text = Lang.Get("MSG_SETTINGS_SERVICE"),
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = Color.FromArgb(50, 50, 50)
+            };
+            pnl.Controls.Add(lblService);
+            yPos += 30;
+
+            chkNotifyServiceStart = new CheckBox
+            {
+                Location = new Point(30, yPos),
+                Size = new Size(500, 25),
+                Text = Lang.Get("MSG_SETTINGS_SERVICE_START"),
+                Font = new Font("Segoe UI", 9),
+                Checked = true
+            };
+            pnl.Controls.Add(chkNotifyServiceStart);
+            yPos += 30;
+
+            chkNotifyServiceStop = new CheckBox
+            {
+                Location = new Point(30, yPos),
+                Size = new Size(500, 25),
+                Text = Lang.Get("MSG_SETTINGS_SERVICE_STOP"),
+                Font = new Font("Segoe UI", 9),
+                Checked = true
+            };
+            pnl.Controls.Add(chkNotifyServiceStop);
+            yPos += 45;
+
+            // Configuration section
+            chkNotifyConfigSave = new CheckBox
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(500, 25),
+                Text = Lang.Get("MSG_SETTINGS_CONFIG_SAVE"),
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                ForeColor = Color.FromArgb(50, 50, 50),
+                Checked = false
+            };
+            pnl.Controls.Add(chkNotifyConfigSave);
+            yPos += 50;
+
+            // Save button
+            btnSaveMessageSettings = new Button
+            {
+                Location = new Point(10, yPos),
+                Size = new Size(200, 35),
+                Text = Lang.Get("MSG_SETTINGS_SAVE_BTN"),
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                BackColor = Color.FromArgb(0, 120, 212),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat,
+                Cursor = Cursors.Hand
+            };
+            btnSaveMessageSettings.FlatAppearance.BorderSize = 0;
+            btnSaveMessageSettings.Click += BtnSaveMessageSettings_Click;
+            pnl.Controls.Add(btnSaveMessageSettings);
+
+            tab.Controls.Add(pnl);
+
+            // Load initial settings
+            LoadMessageNotificationSettings();
+        }
+
+        private void BtnSaveMessageSettings_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                var settings = new MessageNotificationSettings
+                {
+                    MonitorStart = chkNotifyMonitorStart.Checked,
+                    MonitorClose = chkNotifyMonitorClose.Checked,
+                    ServiceStart = chkNotifyServiceStart.Checked,
+                    ServiceStop = chkNotifyServiceStop.Checked,
+                    ConfigSave = chkNotifyConfigSave.Checked
+                };
+
+                string settingsPath = Path.Combine(LOG_DIR, "monitor-notifications.json");
+                var options = new JsonSerializerOptions { WriteIndented = true };
+                var json = JsonSerializer.Serialize(settings, options);
+                File.WriteAllText(settingsPath, json, Encoding.UTF8);
+
+                bool isUa = string.Equals(Program.CurrentLanguage, "UA", StringComparison.OrdinalIgnoreCase);
+                string message = isUa ? "Налаштування збережено!" : "Settings saved!";
+                MessageBox.Show(message, "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                AppendLog("[MONITOR] Message notification settings saved");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                AppendLog($"[ERROR] Failed to save message notification settings: {ex.Message}");
+            }
+        }
+
+        private void LoadMessageNotificationSettings()
+        {
+            try
+            {
+                string settingsPath = Path.Combine(LOG_DIR, "monitor-notifications.json");
+                if (File.Exists(settingsPath))
+                {
+                    var json = File.ReadAllText(settingsPath, Encoding.UTF8);
+                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var settings = JsonSerializer.Deserialize<MessageNotificationSettings>(json, options);
+
+                    if (settings != null)
+                    {
+                        chkNotifyMonitorStart.Checked = settings.MonitorStart;
+                        chkNotifyMonitorClose.Checked = settings.MonitorClose;
+                        chkNotifyServiceStart.Checked = settings.ServiceStart;
+                        chkNotifyServiceStop.Checked = settings.ServiceStop;
+                        chkNotifyConfigSave.Checked = settings.ConfigSave;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[WARN] Failed to load message notification settings: {ex.Message}");
+            }
+        }
+
+        private bool ShouldNotify(string eventType)
+        {
+            try
+            {
+                string settingsPath = Path.Combine(LOG_DIR, "monitor-notifications.json");
+                if (!File.Exists(settingsPath))
+                    return false; // Default: don't send
+
+                var json = File.ReadAllText(settingsPath, Encoding.UTF8);
+                var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                var settings = JsonSerializer.Deserialize<MessageNotificationSettings>(json, options);
+
+                if (settings == null)
+                    return false;
+
+                return eventType switch
+                {
+                    "MonitorStart" => settings.MonitorStart,
+                    "MonitorClose" => settings.MonitorClose,
+                    "ServiceStart" => settings.ServiceStart,
+                    "ServiceStop" => settings.ServiceStop,
+                    "ConfigSave" => settings.ConfigSave,
+                    _ => false
+                };
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         private void SetupFileWatcher()
         {
             try
@@ -1581,6 +2004,99 @@ namespace RDPMonitor
             }
         }
 
+        private bool IsServiceAccessDenied(Exception exception)
+        {
+            if (exception is UnauthorizedAccessException)
+                return true;
+
+            var details = exception.ToString();
+            return details.IndexOf("Access is denied", StringComparison.OrdinalIgnoreCase) >= 0
+                || details.IndexOf("Отказано в доступе", StringComparison.OrdinalIgnoreCase) >= 0
+                || details.IndexOf("Cannot open", StringComparison.OrdinalIgnoreCase) >= 0;
+        }
+
+        private bool TryStopServiceElevated()
+        {
+            try
+            {
+                var arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"Stop-Service -Name '{SERVICE_NAME}' -Force -ErrorAction Stop\"";
+                var processInfo = new ProcessStartInfo
+                {
+                    FileName = "powershell",
+                    Arguments = arguments,
+                    UseShellExecute = true,
+                    Verb = "runas",
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+
+                using var process = Process.Start(processInfo);
+                if (process == null)
+                    return false;
+
+                process.WaitForExit(15000);
+
+                if (process.ExitCode == 0)
+                {
+                    AppendLog("[MONITOR] Service stopped with administrator rights");
+                    return true;
+                }
+
+                AppendLog($"[ERROR] Elevated stop failed with exit code: {process.ExitCode}");
+                return false;
+            }
+            catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            {
+                AppendLog("[MONITOR] Stop service with administrator rights was canceled");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[ERROR] Elevated stop failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        private bool TryStartServiceElevated()
+        {
+            try
+            {
+                var arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"Start-Service -Name '{SERVICE_NAME}' -ErrorAction Stop\"";
+                var processInfo = new ProcessStartInfo
+                {
+                    FileName = "powershell",
+                    Arguments = arguments,
+                    UseShellExecute = true,
+                    Verb = "runas",
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+
+                using var process = Process.Start(processInfo);
+                if (process == null)
+                    return false;
+
+                process.WaitForExit(15000);
+
+                if (process.ExitCode == 0)
+                {
+                    AppendLog("[MONITOR] Service started with administrator rights");
+                    return true;
+                }
+
+                AppendLog($"[ERROR] Elevated start failed with exit code: {process.ExitCode}");
+                return false;
+            }
+            catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+            {
+                AppendLog("[MONITOR] Start service with administrator rights was canceled");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[ERROR] Elevated start failed: {ex.Message}");
+                return false;
+            }
+        }
+
         private void LoadConfiguration()
         {
             try
@@ -1676,8 +2192,11 @@ namespace RDPMonitor
         {
             try
             {
+                EnsureLocalIpsInWhitelistFile();
+
                 lstWhiteList.Items.Clear();
                 string whitelistPath = Path.Combine(LOG_DIR, "whiteList.log");
+                var whitelistItems = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 if (File.Exists(whitelistPath))
                 {
                     foreach (var line in File.ReadAllLines(whitelistPath, Encoding.UTF8))
@@ -1688,14 +2207,115 @@ namespace RDPMonitor
                         {
                             string ip = line.Substring(idx + 3).Trim();
                             if (System.Net.IPAddress.TryParse(ip, out _))
-                                lstWhiteList.Items.Add(ip);
+                                whitelistItems.Add(ip);
                         }
                     }
                 }
+
+                foreach (var ip in whitelistItems.OrderBy(x => x))
+                    lstWhiteList.Items.Add(ip);
+
                 if (lstWhiteList.Items.Count == 0)
                     lstWhiteList.Items.Add(Lang.Get("MSG_NO_WHITELISTED_IPS"));
             }
             catch { }
+        }
+
+        private static bool IsLocalOrPrivateIp(string ipAddress)
+        {
+            if (!System.Net.IPAddress.TryParse(ipAddress, out var parsedIp))
+                return false;
+
+            var ip = parsedIp.IsIPv4MappedToIPv6 ? parsedIp.MapToIPv4() : parsedIp;
+            if (System.Net.IPAddress.IsLoopback(ip))
+                return true;
+
+            if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+            {
+                var bytes = ip.GetAddressBytes();
+                if (bytes.Length != 4)
+                    return false;
+
+                return bytes[0] == 10
+                    || (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+                    || (bytes[0] == 192 && bytes[1] == 168)
+                    || (bytes[0] == 169 && bytes[1] == 254);
+            }
+
+            if (ip.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+            {
+                if (ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal)
+                    return true;
+
+                var bytes = ip.GetAddressBytes();
+                return bytes.Length > 0 && (bytes[0] & 0xFE) == 0xFC;
+            }
+
+            return false;
+        }
+
+        private HashSet<string> GetLocalAutoWhitelistIps()
+        {
+            var localIps = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "127.0.0.1"
+            };
+
+            try
+            {
+                foreach (var ip in System.Net.Dns.GetHostAddresses(System.Net.Dns.GetHostName()))
+                {
+                    if (ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+                        continue;
+
+                    string text = ip.ToString();
+                    if (IsLocalOrPrivateIp(text))
+                        localIps.Add(text);
+                }
+            }
+            catch
+            {
+            }
+
+            return localIps;
+        }
+
+        private void EnsureLocalIpsInWhitelistFile()
+        {
+            try
+            {
+                string whitelistPath = Path.Combine(LOG_DIR, "whiteList.log");
+                var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                if (File.Exists(whitelistPath))
+                {
+                    foreach (var raw in File.ReadAllLines(whitelistPath, Encoding.UTF8))
+                    {
+                        if (string.IsNullOrWhiteSpace(raw))
+                            continue;
+
+                        string line = raw.Trim();
+                        int idx = line.IndexOf("IP:", StringComparison.OrdinalIgnoreCase);
+                        if (idx >= 0)
+                            line = line.Substring(idx + 3).Trim();
+
+                        if (System.Net.IPAddress.TryParse(line, out _))
+                            existing.Add(line);
+                    }
+                }
+
+                var toAdd = GetLocalAutoWhitelistIps().Where(ip => !existing.Contains(ip)).ToList();
+                if (toAdd.Count == 0)
+                    return;
+
+                Directory.CreateDirectory(LOG_DIR);
+                var entries = toAdd.Select(ip => $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] IP: {ip}");
+                File.AppendAllLines(whitelistPath, entries, Encoding.UTF8);
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[WARN] Failed to auto-whitelist local IPs: {ex.Message}");
+            }
         }
 
         private void LoadRecentLogs()
@@ -1738,10 +2358,33 @@ namespace RDPMonitor
                 txtLogs.Invoke(new Action(() => AppendLog(message)));
                 return;
             }
+
+            if (IsDuplicateFileLogEntry(message))
+                return;
+
             string timestamp = DateTime.Now.ToString("HH:mm:ss");
             txtLogs.AppendText($"[{timestamp}] {message}\r\n");
             txtLogs.SelectionStart = txtLogs.Text.Length;
             txtLogs.ScrollToCaret();
+        }
+
+        private bool IsDuplicateFileLogEntry(string message)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+                return false;
+
+            bool isFileLog = message.StartsWith("[SERVICE] ", StringComparison.Ordinal)
+                || message.StartsWith("[ACCESS] ", StringComparison.Ordinal)
+                || message.StartsWith("[BLOCK] ", StringComparison.Ordinal);
+
+            if (!isFileLog)
+                return false;
+
+            if (recentFileLogEntries.ContainsKey(message))
+                return true;
+
+            recentFileLogEntries[message] = DateTime.UtcNow;
+            return false;
         }
 
         private void StartAutoRefresh()
@@ -1776,22 +2419,75 @@ namespace RDPMonitor
             catch { }
         }
 
-        private void CmbLanguage_SelectedIndexChanged(object sender, EventArgs e)
+        private void SetLanguage(string languageCode)
         {
-            // Update current language
-            Program.CurrentLanguage = cmbLanguage.SelectedIndex == 0 ? "UA" : "EN";
+            if (Program.CurrentLanguage == languageCode)
+            {
+                SyncLanguageMenuChecks();
+                return;
+            }
+
+            Program.CurrentLanguage = languageCode;
+            SyncLanguageMenuChecks();
             
-            // Reload all UI texts
             RefreshAllUITexts();
             
-            // Reload data to update with new language
             LoadInitialData();
+        }
+
+        private void SyncLanguageMenuChecks()
+        {
+            if (menuLanguageUa == null || menuLanguageEn == null || menuLanguage == null)
+                return;
+
+            bool isUa = string.Equals(Program.CurrentLanguage, "UA", StringComparison.OrdinalIgnoreCase);
+            menuLanguageUa.Checked = isUa;
+            menuLanguageEn.Checked = !isUa;
+            menuLanguage.Text = isUa ? "Мова" : "Language";
+            menuLanguage.Image = isUa ? menuLanguageUa.Image : menuLanguageEn.Image;
+        }
+
+        private Bitmap CreateLanguageFlagImage(string languageCode)
+        {
+            var bitmap = new Bitmap(24, 16);
+            using (var g = Graphics.FromImage(bitmap))
+            {
+                g.Clear(Color.Transparent);
+
+                if (string.Equals(languageCode, "UA", StringComparison.OrdinalIgnoreCase))
+                {
+                    using var uaBlueBrush = new SolidBrush(Color.FromArgb(0, 87, 183));
+                    using var uaYellowBrush = new SolidBrush(Color.FromArgb(255, 215, 0));
+                    g.FillRectangle(uaBlueBrush, 0, 0, 24, 8);
+                    g.FillRectangle(uaYellowBrush, 0, 8, 24, 8);
+                }
+                else
+                {
+                    using var ukBlueBrush = new SolidBrush(Color.FromArgb(1, 33, 105));
+                    using var ukRedBrush = new SolidBrush(Color.FromArgb(200, 16, 46));
+                    g.FillRectangle(ukBlueBrush, 0, 0, 24, 16);
+                    g.FillRectangle(Brushes.White, 9, 0, 6, 16);
+                    g.FillRectangle(Brushes.White, 0, 5, 24, 6);
+                    g.FillRectangle(ukRedBrush, 10, 0, 4, 16);
+                    g.FillRectangle(ukRedBrush, 0, 6, 24, 4);
+                }
+
+                g.DrawRectangle(Pens.Gray, 0, 0, 23, 15);
+            }
+
+            return bitmap;
         }
 
         private void RefreshAllUITexts()
         {
             // Window title
             this.Text = Lang.Get("MAIN_TITLE");
+            SyncLanguageMenuChecks();
+
+            if (lblServiceStatusHeader != null)
+                lblServiceStatusHeader.Text = Lang.Get("SERVICE_STATUS_HEADER");
+            if (lblConfigurationHeader != null)
+                lblConfigurationHeader.Text = Lang.Get("CONFIG_HEADER");
             
             // Tab titles
             tabControl.TabPages[0].Text = Lang.Get("TAB_CURRENT_LOGS");
@@ -1800,6 +2496,7 @@ namespace RDPMonitor
             tabControl.TabPages[3].Text = Lang.Get("TAB_MANUAL_BLOCK");
             tabControl.TabPages[4].Text = Lang.Get("TAB_SETTINGS");
             tabControl.TabPages[5].Text = Lang.Get("TAB_ALERTS");
+            tabControl.TabPages[6].Text = Lang.Get("TAB_MESSAGE_SETTINGS");
             
             // Buttons
             btnStartService.Text = Lang.Get("BTN_START");
@@ -1812,6 +2509,19 @@ namespace RDPMonitor
             btnUnblockIP.Text = Lang.Get("BTN_UNBLOCK_IP");
             btnAddWhiteIP.Text = Lang.Get("BTN_ADD_WITH_PLUS");
             btnRemoveWhiteIP.Text = Lang.Get("BTN_REMOVE_WITH_X");
+            
+            if (btnSaveMessageSettings != null)
+                btnSaveMessageSettings.Text = Lang.Get("MSG_SETTINGS_SAVE_BTN");
+            if (chkNotifyMonitorStart != null)
+                chkNotifyMonitorStart.Text = Lang.Get("MSG_SETTINGS_MONITOR_START");
+            if (chkNotifyMonitorClose != null)
+                chkNotifyMonitorClose.Text = Lang.Get("MSG_SETTINGS_MONITOR_CLOSE");
+            if (chkNotifyServiceStart != null)
+                chkNotifyServiceStart.Text = Lang.Get("MSG_SETTINGS_SERVICE_START");
+            if (chkNotifyServiceStop != null)
+                chkNotifyServiceStop.Text = Lang.Get("MSG_SETTINGS_SERVICE_STOP");
+            if (chkNotifyConfigSave != null)
+                chkNotifyConfigSave.Text = Lang.Get("MSG_SETTINGS_CONFIG_SAVE");
 
             if (chkAntiBruteEnabled != null)
                 chkAntiBruteEnabled.Text = Lang.Get("ANTI_BRUTE_ENABLED");
@@ -1825,6 +2535,8 @@ namespace RDPMonitor
             // DataGridView columns
             dgvBlockLevels.Columns[0].HeaderText = Lang.Get("GRID_ATTEMPTS");
             dgvBlockLevels.Columns[1].HeaderText = Lang.Get("GRID_BLOCK_MINUTES");
+
+            ApplyMainLayout();
         }
 
         private void BtnRefresh_Click(object sender, EventArgs e)
@@ -1848,23 +2560,54 @@ namespace RDPMonitor
                 }
 
                 var serviceController = new ServiceController(SERVICE_NAME);
+                serviceController.Refresh();
+                if (serviceController.Status == ServiceControllerStatus.Running)
+                {
+                    UpdateServiceStatus();
+                    AppendLog("[MONITOR] Service already running");
+                    return;
+                }
+
                 serviceController.Start();
                 AppendLog("[MONITOR] Starting service...");
                 serviceController.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(10));
                 UpdateServiceStatus();
                 AppendLog("[MONITOR] Service started successfully");
-                SendSimpleTelegramMessage("✅ СЕРВІС ЗАПУЩЕНО");
+                if (ShouldNotify("ServiceStart"))
+                    SendSimpleTelegramMessage("✅ СЕРВІС ЗАПУЩЕНО");
             }
             catch (Exception ex)
             {
-                AppendLog($"[ERROR] Service start failed: {ex.Message}");
+                if (IsServiceAccessDenied(ex))
+                {
+                    AppendLog("[WARN] Service start requires administrator rights. Requesting UAC...");
+
+                    if (TryStartServiceElevated())
+                    {
+                        UpdateServiceStatus();
+                        AppendLog("[MONITOR] Service started successfully");
+                        if (ShouldNotify("ServiceStart"))
+                            SendSimpleTelegramMessage("✅ СЕРВІС ЗАПУЩЕНО");
+                        return;
+                    }
+
+                    AppendLog("[WARN] Service start canceled or access denied");
+                    MessageBox.Show(
+                        "Administrator privileges are required to start the service. Confirm the UAC prompt or run Monitor as Administrator.",
+                        "Access denied",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
 
                 if (TryStartLocalEngine())
                 {
+                    AppendLog("[MONITOR] Local engine started");
                     UpdateServiceStatus();
                     return;
                 }
 
+                AppendLog($"[ERROR] Service start failed: {ex.Message}");
                 MessageBox.Show($"Failed to start service: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -1882,23 +2625,54 @@ namespace RDPMonitor
                 }
 
                 var serviceController = new ServiceController(SERVICE_NAME);
+                serviceController.Refresh();
+                if (serviceController.Status == ServiceControllerStatus.Stopped)
+                {
+                    UpdateServiceStatus();
+                    AppendLog("[MONITOR] Service already stopped");
+                    return;
+                }
+
                 serviceController.Stop();
                 AppendLog("[MONITOR] Stopping service...");
                 serviceController.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(10));
                 UpdateServiceStatus();
                 AppendLog("[MONITOR] Service stopped successfully");
-                SendSimpleTelegramMessage("🛑 СЕРВІС ЗУПИНЕНО");
+                if (ShouldNotify("ServiceStop"))
+                    SendSimpleTelegramMessage("🛑 СЕРВІС ЗУПИНЕНО");
             }
             catch (Exception ex)
             {
-                AppendLog($"[ERROR] Service stop failed: {ex.Message}");
+                if (IsServiceAccessDenied(ex))
+                {
+                    AppendLog("[WARN] Service stop requires administrator rights. Requesting UAC...");
+
+                    if (TryStopServiceElevated())
+                    {
+                        UpdateServiceStatus();
+                        AppendLog("[MONITOR] Service stopped successfully");
+                        if (ShouldNotify("ServiceStop"))
+                            SendSimpleTelegramMessage("🛑 СЕРВІС ЗУПИНЕНО");
+                        return;
+                    }
+
+                    AppendLog("[WARN] Service stop canceled or access denied");
+                    MessageBox.Show(
+                        "Administrator privileges are required to stop the service. Confirm the UAC prompt or run Monitor as Administrator.",
+                        "Access denied",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
 
                 if (TryStopLocalEngine())
                 {
+                    AppendLog("[MONITOR] Local engine stopped");
                     UpdateServiceStatus();
                     return;
                 }
 
+                AppendLog($"[ERROR] Service stop failed: {ex.Message}");
                 MessageBox.Show($"Failed to stop service: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -2013,6 +2787,17 @@ namespace RDPMonitor
             string ip = lstWhiteList.SelectedItem.ToString();
             if (ip == Lang.Get("MSG_NO_WHITELISTED_IPS")) return;
 
+            if (IsLocalOrPrivateIp(ip))
+            {
+                bool isUa = string.Equals(Program.CurrentLanguage, "UA", StringComparison.OrdinalIgnoreCase);
+                MessageBox.Show(
+                    isUa ? "Локальні IP захищені: їх не можна видаляти з білого списку." : "Local IPs are protected and cannot be removed from whitelist.",
+                    isUa ? "Захищено" : "Protected",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
             try
             {
                 string whitelistPath = Path.Combine(LOG_DIR, "whiteList.log");
@@ -2039,14 +2824,28 @@ namespace RDPMonitor
                 return;
             }
 
-            if (!int.TryParse(txtBlockMinutes.Text.Trim(), out int minutes) || minutes < 1)
+            if (IsLocalOrPrivateIp(ip))
             {
-                MessageBox.Show("Enter valid block duration (minutes)", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                bool isUa = string.Equals(Program.CurrentLanguage, "UA", StringComparison.OrdinalIgnoreCase);
+                string message = isUa
+                    ? "Локальні IP автоматично у білому списку. Блокування заборонено."
+                    : "Local IPs are auto-whitelisted and cannot be blocked.";
+                lblBlockStatus.Text = message;
+                lblBlockStatus.ForeColor = Color.FromArgb(255, 152, 0);
+                MessageBox.Show(message, isUa ? "Захищено" : "Protected", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (!TryParseBlockDurationMinutes(txtBlockMinutes.Text.Trim(), out int minutes))
+            {
+                MessageBox.Show("Enter valid duration: 60, 12h, 7d, 2w", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
             try
             {
+                string durationText = FormatDurationForDisplay(minutes);
+
                 // Add to block_list.log
                 string blockLogPath = Path.Combine(LOG_DIR, "block_list.log");
                 DateTime until = DateTime.Now.AddMinutes(minutes);
@@ -2068,10 +2867,10 @@ namespace RDPMonitor
                 }
 
                 LoadBannedIPs();
-                lblBlockStatus.Text = $"✓ Successfully blocked IP {ip} for {minutes} minutes\nUntil: {until:yyyy-MM-dd HH:mm:ss}\n\nIP has been added to firewall rule.";
+                lblBlockStatus.Text = $"✓ Successfully blocked IP {ip} for {durationText} ({minutes} minutes)\nUntil: {until:yyyy-MM-dd HH:mm:ss}\n\nIP has been added to firewall rule.";
                 lblBlockStatus.ForeColor = Color.FromArgb(76, 175, 80);
-                AppendLog($"[MONITOR] Manually blocked IP {ip} for {minutes} minutes");
-                SendSimpleTelegramMessage($"🚫 ЗАБЛОКОВАНО: {ip} на {minutes} хв (до {until:HH:mm})");
+                AppendLog($"[MONITOR] Manually blocked IP {ip} for {durationText} ({minutes}m)");
+                SendSimpleTelegramMessage($"🚫 ЗАБЛОКОВАНО: {ip} на {durationText} (до {until:HH:mm})");
                 txtIPToBlock.Clear();
             }
             catch (Exception ex)
@@ -2080,6 +2879,55 @@ namespace RDPMonitor
                 lblBlockStatus.ForeColor = Color.FromArgb(244, 67, 54);
                 AppendLog($"[ERROR] Manual block failed: {ex.Message}");
             }
+        }
+
+        private bool TryParseBlockDurationMinutes(string rawInput, out int minutes)
+        {
+            minutes = 0;
+            if (string.IsNullOrWhiteSpace(rawInput))
+                return false;
+
+            string input = rawInput.Trim().ToLowerInvariant().Replace(" ", string.Empty);
+            var match = Regex.Match(input, @"^(?<value>\d+)(?<unit>[a-zа-яіїєґ]*)$");
+            if (!match.Success)
+                return false;
+
+            if (!long.TryParse(match.Groups["value"].Value, out var value) || value < 1)
+                return false;
+
+            string unit = match.Groups["unit"].Value;
+            long multiplier = unit switch
+            {
+                "" or "m" or "min" or "mins" or "minute" or "minutes" or "хв" or "хвилин" or "мин" or "м" => 1,
+                "h" or "hr" or "hrs" or "hour" or "hours" or "ч" or "час" or "часа" or "часов" or "год" => 60,
+                "d" or "day" or "days" or "д" or "дн" or "день" or "дня" or "дней" => 1440,
+                "w" or "wk" or "wks" or "week" or "weeks" or "н" or "нед" or "неделя" or "недель" or "тиж" or "тижд" or "тиждень" => 10080,
+                _ => 0
+            };
+
+            if (multiplier == 0)
+                return false;
+
+            long totalMinutes = value * multiplier;
+            if (totalMinutes < 1 || totalMinutes > int.MaxValue)
+                return false;
+
+            minutes = (int)totalMinutes;
+            return true;
+        }
+
+        private string FormatDurationForDisplay(int minutes)
+        {
+            if (minutes % 10080 == 0)
+                return $"{minutes / 10080}w";
+
+            if (minutes % 1440 == 0)
+                return $"{minutes / 1440}d";
+
+            if (minutes % 60 == 0)
+                return $"{minutes / 60}h";
+
+            return $"{minutes}m";
         }
 
 
@@ -2193,6 +3041,28 @@ namespace RDPMonitor
             return true;
         }
 
+        private bool TryParseDurationBox(TextBox textBox, string fieldName, out int minutes, out string conversionInfo)
+        {
+            minutes = 0;
+            conversionInfo = string.Empty;
+
+            string rawInput = textBox.Text.Trim();
+            if (!TryParseBlockDurationMinutes(rawInput, out var parsed) || parsed < 1)
+            {
+                MessageBox.Show($"Invalid value for {fieldName}. Use: 60, 12h, 7d, 2w", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                textBox.Focus();
+                return false;
+            }
+
+            minutes = parsed;
+            textBox.Text = minutes.ToString();
+
+            if (!string.Equals(rawInput, minutes.ToString(), StringComparison.OrdinalIgnoreCase))
+                conversionInfo = $"{fieldName}: {rawInput} = {minutes}m";
+
+            return true;
+        }
+
         private void BtnSaveConfig_Click(object sender, EventArgs e)
         {
             try
@@ -2204,17 +3074,42 @@ namespace RDPMonitor
                     return;
                 }
 
+                bool isUa = string.Equals(Program.CurrentLanguage, "UA", StringComparison.OrdinalIgnoreCase);
+                var durationConversions = new List<string>();
+
                 var levels = new List<BlockLevel>();
                 foreach (DataGridViewRow row in dgvBlockLevels.Rows)
                 {
+                    if (row.IsNewRow)
+                        continue;
+
                     if (row.Cells[0].Value != null && row.Cells[1].Value != null)
                     {
-                        if (int.TryParse(row.Cells[0].Value.ToString(), out int attempts) &&
-                            int.TryParse(row.Cells[1].Value.ToString(), out int minutes) &&
-                            attempts > 0 && minutes > 0)
+                        string attemptsRaw = row.Cells[0].Value?.ToString()?.Trim() ?? string.Empty;
+                        string minutesRaw = row.Cells[1].Value?.ToString()?.Trim() ?? string.Empty;
+
+                        if (!int.TryParse(attemptsRaw, out int attempts) || attempts < 1)
                         {
-                            levels.Add(new BlockLevel { Attempts = attempts, BlockMinutes = minutes });
+                            MessageBox.Show("Invalid attempts value in block levels table", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
                         }
+
+                        if (!TryParseBlockDurationMinutes(minutesRaw, out int minutes) || minutes < 1)
+                        {
+                            MessageBox.Show("Invalid block duration in table. Use: 60, 12h, 7d, 2w", "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
+
+                        if (!string.Equals(minutesRaw, minutes.ToString(), StringComparison.OrdinalIgnoreCase))
+                        {
+                            string levelLabel = isUa
+                                ? $"Рівень (спроби {attempts})"
+                                : $"Level (attempts {attempts})";
+                            durationConversions.Add($"{levelLabel}: {minutesRaw} = {minutes}m");
+                        }
+
+                        row.Cells[1].Value = minutes;
+                        levels.Add(new BlockLevel { Attempts = attempts, BlockMinutes = minutes });
                     }
                 }
 
@@ -2226,7 +3121,9 @@ namespace RDPMonitor
 
                 if (!TryParseIntBox(txtSprayWindowMinutes, "Spray windowMinutes", 1, out int sprayWindowMinutes)) return;
                 if (!TryParseIntBox(txtSprayUniqueIpsThreshold, "Spray uniqueIpsThreshold", 2, out int sprayUniqueIpsThreshold)) return;
-                if (!TryParseIntBox(txtSprayBlockMinutes, "Spray blockMinutes", 1, out int sprayBlockMinutes)) return;
+                string sprayLabel = isUa ? "Spray блок" : "Spray block";
+                if (!TryParseDurationBox(txtSprayBlockMinutes, sprayLabel, out int sprayBlockMinutes, out string sprayConversion)) return;
+                if (!string.IsNullOrWhiteSpace(sprayConversion)) durationConversions.Add(sprayConversion);
 
                 if (!TryParseIntBox(txtRecurrenceLookbackHours, "Recurrence lookbackHours", 1, out int recurrenceLookbackHours)) return;
                 if (!TryParseDoubleBox(txtRecurrenceStepMultiplier, "Recurrence stepMultiplier", 0.0, out double recurrenceStepMultiplier)) return;
@@ -2234,7 +3131,9 @@ namespace RDPMonitor
 
                 if (!TryParseIntBox(txtSubnetWindowMinutes, "Subnet windowMinutes", 1, out int subnetWindowMinutes)) return;
                 if (!TryParseIntBox(txtSubnetUniqueIpsThreshold, "Subnet uniqueIpsThreshold", 2, out int subnetUniqueIpsThreshold)) return;
-                if (!TryParseIntBox(txtSubnetBlockMinutes, "Subnet blockMinutes", 1, out int subnetBlockMinutes)) return;
+                string subnetLabel = isUa ? "Subnet блок" : "Subnet block";
+                if (!TryParseDurationBox(txtSubnetBlockMinutes, subnetLabel, out int subnetBlockMinutes, out string subnetConversion)) return;
+                if (!string.IsNullOrWhiteSpace(subnetConversion)) durationConversions.Add(subnetConversion);
 
                 string configPath = Path.Combine(LOG_DIR, "config.json");
                 ServiceConfig? config;
@@ -2288,7 +3187,42 @@ namespace RDPMonitor
 
                 LoadConfiguration();
                 AppendLog("[MONITOR] Configuration saved successfully");
-                MessageBox.Show("Configuration saved successfully!\nService will reload settings automatically.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+                string languageLabel = isUa ? "Українська (UA)" : "English (EN)";
+                var successMessage = new StringBuilder();
+
+                if (isUa)
+                {
+                    successMessage.AppendLine("Конфігурацію збережено успішно!");
+                    successMessage.AppendLine("Сервіс автоматично перезавантажить налаштування.");
+                    successMessage.AppendLine();
+                    successMessage.AppendLine($"Поточна мова інтерфейсу: {languageLabel}");
+                    if (durationConversions.Count > 0)
+                    {
+                        successMessage.AppendLine();
+                        successMessage.AppendLine("Перерахунок тривалості:");
+                        foreach (var conversion in durationConversions)
+                            successMessage.AppendLine($"- {conversion}");
+                    }
+
+                    MessageBox.Show(successMessage.ToString(), "Успіх", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                else
+                {
+                    successMessage.AppendLine("Configuration saved successfully!");
+                    successMessage.AppendLine("Service will reload settings automatically.");
+                    successMessage.AppendLine();
+                    successMessage.AppendLine($"Current UI language: {languageLabel}");
+                    if (durationConversions.Count > 0)
+                    {
+                        successMessage.AppendLine();
+                        successMessage.AppendLine("Duration conversion:");
+                        foreach (var conversion in durationConversions)
+                            successMessage.AppendLine($"- {conversion}");
+                    }
+
+                    MessageBox.Show(successMessage.ToString(), "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
             }
             catch (Exception ex)
             {
@@ -2299,9 +3233,6 @@ namespace RDPMonitor
 
         protected override void OnFormClosing(FormClosingEventArgs e)
         {
-            // Отправить сообщение перед закрытием
-            SendSimpleTelegramMessage("⛔ МЕНЯ ЗАКРЫЛИ");
-            
             refreshTimer?.Stop();
             fileWatcher?.Dispose();
             base.OnFormClosing(e);
@@ -2449,5 +3380,47 @@ namespace RDPMonitor
         
         [System.Text.Json.Serialization.JsonPropertyName("blockMinutes")]
         public int BlockMinutes { get; set; }
+    }
+
+    public class MessageNotificationSettings
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("monitorStart")]
+        public bool MonitorStart { get; set; } = false;
+
+        [System.Text.Json.Serialization.JsonPropertyName("monitorClose")]
+        public bool MonitorClose { get; set; } = false;
+
+        [System.Text.Json.Serialization.JsonPropertyName("serviceStart")]
+        public bool ServiceStart { get; set; } = true;
+
+        [System.Text.Json.Serialization.JsonPropertyName("serviceStop")]
+        public bool ServiceStop { get; set; } = true;
+
+        [System.Text.Json.Serialization.JsonPropertyName("configSave")]
+        public bool ConfigSave { get; set; } = false;
+    }
+
+    // Custom transparent PictureBox for background
+    public class TransparentPictureBox : PictureBox
+    {
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            if (this.Image != null)
+            {
+                var attributes = new System.Drawing.Imaging.ImageAttributes();
+                var matrix = new System.Drawing.Imaging.ColorMatrix
+                {
+                    Matrix33 = 0.08f // Opacity: 8%
+                };
+                attributes.SetColorMatrix(matrix, System.Drawing.Imaging.ColorMatrixFlag.Default, System.Drawing.Imaging.ColorAdjustType.Bitmap);
+                
+                e.Graphics.DrawImage(
+                    this.Image,
+                    new Rectangle(0, 0, this.Width, this.Height),
+                    0, 0, this.Image.Width, this.Image.Height,
+                    GraphicsUnit.Pixel,
+                    attributes);
+            }
+        }
     }
 }
